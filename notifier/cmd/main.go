@@ -16,5 +16,5 @@ func main() {
 
 	m := mux.NewRouter()
 	m.HandleFunc("/webhook", s.HandleWebhookHTTP())
-	http.ListenAndServeTLS(":443", "cert.crt", "cert.key", m)
+	log.Fatal(http.ListenAndServeTLS(":443", "cert.crt", "cert.key", m))
 }
