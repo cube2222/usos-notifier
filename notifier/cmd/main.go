@@ -16,10 +16,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-
 	m := chi.NewMux()
 	m.Use(requestid.HTTPInjector)
 	m.Use(httplogger.HTTPInject)
 	m.HandleFunc("/webhook", s.HandleWebhookHTTP())
+	log.Println("Serving...")
 	log.Fatal(http.ListenAndServeTLS(":443", "cert.crt", "cert.key", m))
 }
