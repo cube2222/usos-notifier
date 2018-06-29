@@ -41,7 +41,7 @@ func (s *Service) handleWebhook(webhook MessageReceived) error {
 func (s *Service) HandleWebhookHTTP() func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("hub.mode") == "subscribe" && r.URL.Query().Get("hub.verify_token") == "aowicb038qfi87uvabo8li7b32pv84743qv2" {
-			fmt.Fprint(w, r.URL.Query().Get("hub.challange"))
+			fmt.Fprint(w, r.URL.Query().Get("hub.challenge"))
 			return
 		}
 
