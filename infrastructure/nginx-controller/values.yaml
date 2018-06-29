@@ -1,0 +1,6 @@
+# helm install --values values.yaml --name nginx-ingress stable/nginx-ingress
+controller:
+    service:
+        type: NodePort
+rbac:
+    create: true

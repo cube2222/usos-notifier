@@ -1,10 +1,8 @@
 package service
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 )
@@ -18,7 +16,7 @@ func NewService() (*Service, error) {
 	}, nil
 }
 
-type MessageReceived struct {
+type MessageEvent struct {
 	Sender struct {
 		ID string `json:"id"`
 	} `json:"sender"`
@@ -35,7 +33,16 @@ type MessageReceived struct {
 	} `json:"message"`
 }
 
-func (s *Service) handleWebhook(webhook MessageReceived) error {
+type Webhook struct {
+	Object string `json:"object"`
+	Entry []struct {
+		ID        string         `json:"id"`
+		Time      int64          `json:"time"`
+		Messaging []MessageEvent `json:"messaging"`
+	} `json:"entry"`
+}
+
+func (s *Service) handleWebhook(webhook MessageEvent) error {
 	log.Println(fmt.Sprintf("%s: %s", webhook.Sender, webhook.Message.Text))
 	return nil
 }
@@ -47,30 +54,25 @@ func (s *Service) HandleWebhookHTTP() func(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		webhook := MessageReceived{}
+		webhook := Webhook{}
 
-		data, err := ioutil.ReadAll(r.Body)
+		err := json.NewDecoder(r.Body).Decode(&webhook)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			fmt.Fprint(w, err)
 			return
 		}
 
-		log.Printf("%s", data)
-
-		err = json.NewDecoder(bytes.NewReader(data)).Decode(&webhook)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprint(w, err)
-			return
-		}
-
-		err = s.handleWebhook(webhook)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			// TODO: Proper zap logging
-			log.Println(err)
-			return
+		for _, page := range webhook.Entry {
+			for _, event := range page.Messaging {
+				err = s.handleWebhook(event)
+				if err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					// TODO: Proper zap logging
+					log.Println(err)
+					return
+				}
+			}
 		}
 	}
 }
