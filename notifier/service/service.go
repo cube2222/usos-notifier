@@ -1,8 +1,10 @@
 package service
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 )
@@ -47,7 +49,16 @@ func (s *Service) HandleWebhookHTTP() func(w http.ResponseWriter, r *http.Reques
 
 		webhook := MessageReceived{}
 
-		err := json.NewDecoder(r.Body).Decode(&webhook)
+		data, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, err)
+			return
+		}
+
+		log.Printf("%s", data)
+
+		err = json.NewDecoder(bytes.NewReader(data)).Decode(&webhook)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			fmt.Fprint(w, err)
