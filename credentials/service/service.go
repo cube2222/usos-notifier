@@ -62,7 +62,7 @@ func NewService() (*Service, error) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	tmpl, err := template.New("authorize.html").Parse(string(data)) // TODO: Config param
+	tmpl, err := template.New("authorize.html").Parse(string(data))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func NewService() (*Service, error) {
 	}
 
 	go func() {
-		log.Fatal(pubsub.Subscription("credentials-user-created").Receive(context.Background(), service.handleUserCreated))
+		log.Fatal(pubsub.Subscription("credentials-notifier-user_created").Receive(context.Background(), service.handleUserCreated))
 	}()
 
 	return service, nil
@@ -90,7 +90,7 @@ type Encrypted struct {
 }
 
 var encryptionKey = fmt.Sprintf("projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s",
-	"usos-notifier", "global", "testing", "test-key")
+	"usos-notifier", "global", "credentials", "credentials")
 
 // TODO: Errors should use grpc error code package
 func (s *Service) GetSession(ctx context.Context, r *credentials.GetSessionRequest) (*credentials.GetSessionResponse, error) {
@@ -137,7 +137,7 @@ func (s *Service) GetSession(ctx context.Context, r *credentials.GetSessionReque
 }
 
 func (s *Service) handleSignup(ctx context.Context, user, password, uuid string) error {
-	// TODO: Check if you can actually login using this
+	// TODO: Check if you can actually login using this before accepting
 	credsPhrase := encodeUserAndPassword(user, password)
 
 	encryptRequest := cloudkms.EncryptRequest{
@@ -261,7 +261,7 @@ func (s *Service) handleUserCreated(ctx context.Context, message *pubsub.Message
 	}
 
 	err = s.sender.SendNotification(ctx, userID,
-		fmt.Sprintf("Autoryzuj mnie do używania Twoich danych logowania: https://notifier.jacobmartins.com/credentials/authorization?token=%v", token))
+		fmt.Sprintf("Proszę autoryzuj mnie do używania Twoich danych logowania: https://notifier.jacobmartins.com/credentials/authorization?token=%v", token))
 	if err != nil {
 		log.Println("Couldn't send notification: ", err)
 		return

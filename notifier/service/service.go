@@ -1,3 +1,5 @@
+// TODO: Create sub-packages for the mapping and messaging
+
 package service
 
 import (
@@ -46,7 +48,7 @@ func NewService() (*Service, error) {
 	}
 
 	go func() {
-		log.Fatal(cli.Subscription("sender").Receive(context.Background(), service.handleMessageSendEvent))
+		log.Fatal(cli.Subscription("notifier-notifications").Receive(context.Background(), service.handleMessageSendEvent))
 	}()
 
 	return service, nil
@@ -67,48 +69,6 @@ type MessageEvent struct {
 			Payload string `json:"payload"`
 		} `json:"quick_reply"`
 	} `json:"message"`
-}
-
-type Webhook struct {
-	Object string `json:"object"`
-	Entry []struct {
-		ID        string         `json:"id"`
-		Time      int64          `json:"time"`
-		Messaging []MessageEvent `json:"messaging"`
-	} `json:"entry"`
-}
-
-func (s *Service) handleWebhook(ctx context.Context, webhook MessageEvent) error {
-	userExists := true
-
-	userID, err := s.getUserID(ctx, webhook.Sender.ID)
-	if err != nil {
-		if errors.Cause(err) == datastore.ErrNoSuchEntity {
-			userExists = false
-		} else {
-			return errors.Wrap(err, "couldn't get userID")
-		}
-	}
-
-	if !userExists {
-		userID, err = s.createUser(ctx, webhook.Sender.ID)
-		if err != nil {
-			return errors.Wrap(err, "couldn't create user")
-		}
-	}
-
-	err = s.publisher.PublishEvent(ctx, "commands",
-		map[string]string{
-			"user_id": userID,
-			"origin":  "fb_messenger",
-		},
-		webhook.Message.Text,
-	)
-	if err != nil {
-		return errors.Wrap(err, "couldn't publish event")
-	}
-
-	return nil
 }
 
 func (s *Service) HandleWebhookHTTP() func(w http.ResponseWriter, r *http.Request) {
@@ -139,6 +99,48 @@ func (s *Service) HandleWebhookHTTP() func(w http.ResponseWriter, r *http.Reques
 			}
 		}
 	}
+}
+
+type Webhook struct {
+	Object string `json:"object"`
+	Entry []struct {
+		ID        string         `json:"id"`
+		Time      int64          `json:"time"`
+		Messaging []MessageEvent `json:"messaging"`
+	} `json:"entry"`
+}
+
+func (s *Service) handleWebhook(ctx context.Context, webhook MessageEvent) error {
+	userExists := true
+
+	userID, err := s.getUserID(ctx, webhook.Sender.ID)
+	if err != nil {
+		if errors.Cause(err) == datastore.ErrNoSuchEntity {
+			userExists = false
+		} else {
+			return errors.Wrap(err, "couldn't get userID")
+		}
+	}
+
+	if !userExists {
+		userID, err = s.createUser(ctx, webhook.Sender.ID)
+		if err != nil {
+			return errors.Wrap(err, "couldn't create user")
+		}
+	}
+
+	err = s.publisher.PublishEvent(ctx, "notifier-commands",
+		map[string]string{
+			"user_id": userID,
+			"origin":  "fb_messenger",
+		},
+		webhook.Message.Text,
+	)
+	if err != nil {
+		return errors.Wrap(err, "couldn't publish event")
+	}
+
+	return nil
 }
 
 type UserID struct {
@@ -178,7 +180,7 @@ func (s *Service) createUser(ctx context.Context, messengerID string) (string, e
 		return "", errors.Wrap(err, "couldn't commit transaction")
 	}
 
-	err = s.publisher.PublishEvent(ctx, "user-created",
+	err = s.publisher.PublishEvent(ctx, "notifier-user_created",
 		map[string]string{
 			"origin": "fb-messenger",
 		},

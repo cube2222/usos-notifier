@@ -21,10 +21,10 @@ spec:
       volumes:
       - name: service-account-file
         secret:
-          secretName: credits-service-account # temporary
+          secretName: notifier-service-account
       containers:
       - name: notifier
-        image: cube2222/notifier:0.0.2
+        image: cube2222/notifier:0.0.3
         ports:
         - containerPort: 8080
         - containerPort: 6666

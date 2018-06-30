@@ -41,9 +41,13 @@ In this document. Whenever a resource is described to be created, it may be foll
         * notifier: Pub/Sub Publisher
 2. Create subscriptions:
     * notifier-notifications
-        * notifier: Pub/Sub Subscriber
+        * notifier: Pub/Sub Subscriber, Pub/Sub Viewer
     * credentials-notifier-user_created
-        * credentials: Pub/Sub Subscriber
+        * credentials: Pub/Sub Subscriber, Pub/Sub Viewer
+
+## Datastore
+
+You need to have Datastore activated. The microservices will create necessary kinds as required.
 
 ## Kubernetes Engine
 
@@ -52,6 +56,9 @@ In this document. Whenever a resource is described to be created, it may be foll
     * Boot disk size - 20GB
     * Network policy - Enabled
     * HTTP load balancing - Disabled
+    
+#### Compute engine:
+    * Turn on https network access to the node, which you will route your DNS to.
     
 #### Preliminary cluster setup:
 ```
@@ -66,8 +73,8 @@ In this document. Whenever a resource is described to be created, it may be foll
 #### Secrets:
 * TLS certs for the nginx controller. Standard PEM. I'm using cloudflare generated ones.
     * ```kubectl create secret tls tls-secret --key cert.key --cert cert.crt```
-* Credits service account. Download the json file and call it credits.json.
-    * ```kubectl create secret generic credits-service-account  --from-file=serviceaccount.json=credits.json```
+* Credentials service account. Download the json file and call it credentials.json.
+    * ```kubectl create secret generic credentials-service-account  --from-file=serviceaccount.json=credentials.json```
 * Notifier service account. Download the json file and call it notifier.json.
     * ```kubectl create secret generic notifier-service-account  --from-file=serviceaccount.json=notifier.json```
 * Messenger API key. Put the key into your local MESSENGER_API environment variable.
@@ -81,8 +88,8 @@ In this document. Whenever a resource is described to be created, it may be foll
     * ```kubectl apply -f ingress.yaml```
 
 #### Microservices:
-* Credits:
-    * ```kubectl apply -f credits.yaml```
+* Credentials:
+    * ```kubectl apply -f credentials.yaml```
 * Notifier:
     * ```kubectl apply -f notifier.yaml```
     
