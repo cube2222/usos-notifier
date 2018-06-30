@@ -2,20 +2,20 @@ package service
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"html/template"
 	"log"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
+	"os"
 	"regexp"
-	"strconv"
-	"strings"
-	"time"
 
 	"cloud.google.com/go/datastore"
+	"cloud.google.com/go/pubsub"
+	"github.com/cube2222/usos-notifier/common/events"
 	"github.com/cube2222/usos-notifier/credentials"
+	"github.com/cube2222/usos-notifier/credentials/resources"
+	"github.com/cube2222/usos-notifier/credentials/service/tokens"
+	"github.com/cube2222/usos-notifier/notifier"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
@@ -26,6 +26,12 @@ import (
 type Service struct {
 	ds  *datastore.Client
 	kms *cloudkms.Service
+
+	tokens *tokens.Tokens
+	sender *notifier.NotificationSender
+
+	tmpl        *template.Template
+	tokenRegexp *regexp.Regexp
 }
 
 func NewService() (*Service, error) {
@@ -39,24 +45,48 @@ func NewService() (*Service, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't create cloud kms client")
 	}
-	ds, err := datastore.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile("C:/Development/Projects/Go/src/github.com/cube2222/usos-notifier/usos-notifier-9a2e44d7f26b.json"))
+	ds, err := datastore.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
 	if err != nil {
-	    return nil, errors.Wrap(err, "couldn't create datastore client")
+		return nil, errors.Wrap(err, "couldn't create datastore client")
+	}
+	pubsub, err := pubsub.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
+	if err != nil {
+		return nil, errors.Wrap(err, "couldn't create datastore client")
 	}
 
-	return &Service{
-		ds:  ds,
-		kms: kms,
-	}, nil
+	tokens := tokens.NewTokens(ds)
+
+	sender := notifier.NewNotificationSender(pubsub)
+
+	data, err := resources.Asset("authorize.html")
+	if err != nil {
+		log.Fatal(err)
+	}
+	tmpl, err := template.New("authorize.html").Parse(string(data)) // TODO: Config param
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	tokenRegexp := regexp.MustCompile("^[0-9]+$")
+
+	service := &Service{
+		ds:          ds,
+		kms:         kms,
+		tokens:      tokens,
+		sender:      sender,
+		tmpl:        tmpl,
+		tokenRegexp: tokenRegexp,
+	}
+
+	go func() {
+		log.Fatal(pubsub.Subscription("credentials-user-created").Receive(context.Background(), service.handleUserCreated))
+	}()
+
+	return service, nil
 }
 
 type Encrypted struct {
 	UserAndPassword string
-}
-
-type Credentials struct {
-	User string
-	Password string
 }
 
 var encryptionKey = fmt.Sprintf("projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s",
@@ -96,7 +126,7 @@ func (s *Service) GetSession(ctx context.Context, r *credentials.GetSessionReque
 		return nil, errors.Wrap(err, "couldn't decode credentials")
 	}
 
-	session, err := s.login(creds.User, creds.Password)
+	session, err := login(creds.User, creds.Password)
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't login")
 	}
@@ -111,7 +141,7 @@ func (s *Service) handleSignup(ctx context.Context, user, password, uuid string)
 	credsPhrase := encodeUserAndPassword(user, password)
 
 	encryptRequest := cloudkms.EncryptRequest{
-		AdditionalAuthenticatedData: base64.StdEncoding.EncodeToString([]byte("something")),
+		AdditionalAuthenticatedData: base64.StdEncoding.EncodeToString([]byte("something")), //TODO: Change
 		Plaintext:                   base64.StdEncoding.EncodeToString([]byte(credsPhrase)),
 	}
 	res, err := s.kms.Projects.Locations.KeyRings.CryptoKeys.Encrypt(encryptionKey, &encryptRequest).Do()
@@ -131,159 +161,111 @@ func (s *Service) handleSignup(ctx context.Context, user, password, uuid string)
 	return nil
 }
 
-func encodeUserAndPassword(user, password string) string {
-	return fmt.Sprintf("%d-%s-%d-%s", len(user), user, len(password), password)
-}
+func (s *Service) ServeAuthorizationPageHTTP(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
 
-func decodeUserAndPassword(encoded string) (*Credentials, error) {
-	i := strings.Index(encoded, "-")
-	if i == -1 {
-		return nil, errors.New("missing username length")
-	}
-	usernameLen, err := strconv.Atoi(encoded[:i])
-	if err != nil {
-		return nil, errors.Wrap(err, "invalid username length")
-	}
-
-	usernameBegin := i+1
-	usernameEnd := usernameBegin + usernameLen
-
-	// +1 because of the dash after the username
-	if len(encoded) <= usernameEnd + 1 {
-		return nil, errors.New("missing part of encoded username value")
-	}
-
-	passwordPart := encoded[usernameEnd+1:]
-
-	i = strings.Index(passwordPart, "-")
-	if i == -1 {
-		return nil, errors.New("missing password length")
-	}
-	passwordLen, err := strconv.Atoi(passwordPart[:i])
-	if err != nil {
-		return nil, errors.Wrap(err, "invalid password length")
-	}
-
-	passwordBegin := i + 1
-	passwordEnd := passwordBegin + passwordLen
-
-	if len(encoded) <= passwordEnd {
-		return nil, errors.New("missing part of encoded password value")
-	}
-
-	return &Credentials{
-		User:     encoded[usernameBegin:usernameEnd],
-		Password: passwordPart[passwordBegin:passwordEnd],
-	}, nil
-}
-
-func (s *Service) HandleSignupHTTP() func(http.ResponseWriter, *http.Request) {
-	type request struct {
-		UUID     string `json:"uuid"` // TODO: In the future, just pass the token
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
-	return func(w http.ResponseWriter, r *http.Request) {
-		// TODO: add coupon handling
-
-		var creds request
-
-		err := json.NewDecoder(r.Body).Decode(&creds)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprint(w, err)
-			return
-		}
-
-		err = s.handleSignup(r.Context(), creds.Username, creds.Password, creds.UUID)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			log.Println(err)
-			return
-		}
-
+	matched := s.tokenRegexp.MatchString(token)
+	if !matched {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, "Invalid token.")
 		return
 	}
+
+	s.writeAuthorizePage(token, "", w, r)
 }
 
-var ErrAlreadySavedMsg = "Already saved."
+func (s *Service) HandleAuthorizeHTTP(w http.ResponseWriter, r *http.Request) {
+	username := r.PostFormValue("username")
+	password := r.PostFormValue("password")
+	token := r.PostFormValue("token")
 
-func (s *Service) login(user, password string) (string, error) {
-	uri, err := url.Parse("https://logowanie.uw.edu.pl/cas/login")
+	if username == "" {
+		s.writeAuthorizePage(token, "Missing username.", w, r)
+		return
+	}
+	if password == "" {
+		s.writeAuthorizePage(token, "Missing password.", w, r)
+		return
+	}
+	if !s.tokenRegexp.MatchString(token) {
+		s.writeAuthorizePage(token, "Invalid token.", w, r)
+		return
+	}
+
+	userID, err := s.tokens.GetUserID(r.Context(), token)
 	if err != nil {
-		return "", errors.Wrap(err, "couldn't parse request url")
+		s.writeAuthorizePage(token, "Invalid token.", w, r)
+		return
 	}
 
-	q := uri.Query()
-	q.Add("service", "https://usosweb.mimuw.edu.pl/kontroler.php?_action=logowaniecas/index")
-	q.Add("locale", "pl")
-	uri.RawQuery = q.Encode()
-
-	jar, err := cookiejar.New(nil)
+	err = s.handleSignup(r.Context(), username, password, userID)
+	// TODO: Better error information
 	if err != nil {
-		return "", errors.Wrap(err, "couldn't create empty cookiejar")
+		s.writeAuthorizePage(token, "Error.", w, r)
+		log.Println(err)
+		return
 	}
 
-	redir := ""
-
-	// Better create a new http client each time.
-	// We explicitly don't want to share any state.
-	cli := http.Client{
-		Jar:     jar,
-		Timeout: time.Second * 40,
-
-		// This will make sure we only get redirected once and fulfill the ticket exchange
-		// USOS tends to throw us into an infinite redirection loop.
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if redir == "" {
-				redir = req.URL.String()
-				return nil
-			} else {
-				return errors.New(ErrAlreadySavedMsg)
-			}
-		},
-	}
-
-	resp, err := cli.Get(uri.String())
+	err = s.sender.SendNotification(r.Context(), userID, "Otrzymałem Twoje dane logowania.")
 	if err != nil {
-		log.Fatal(err)
+		log.Println("Couldn't send notification: ", err)
+		return
 	}
 
-	data, err := ioutil.ReadAll(resp.Body)
+	err = s.tokens.InvalidateAuthorizationToken(r.Context(), token)
 	if err != nil {
-		log.Fatal(err)
+		log.Println("Couldn't invalidate token: ", err)
 	}
 
-	LTReg, err := regexp.Compile("LT-[a-zA-Z0-9]+-[a-zA-Z0-9]+")
+	// TODO: Write some success message
+}
+
+type SignupPageParams struct {
+	Token          string
+	MessagePresent bool
+	Message        string
+}
+
+func (s *Service) writeAuthorizePage(token, message string, w http.ResponseWriter, r *http.Request) {
+	params := SignupPageParams{
+		Token:          token,
+		MessagePresent: message != "",
+		Message:        message,
+	}
+
+	err := s.tmpl.Execute(w, params)
 	if err != nil {
-		log.Fatal(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 
-	// TODO: Handle inexistance of LT
-	LT := LTReg.Find(data)
+	// TODO: Add links to the description of the app architecture and request the user to accept all terms. Checkboxes maybe
+}
 
-	form := url.Values{}
-	form.Add("username", user)
-	form.Add("password", password)
-	form.Add("lt", string(LT))
-	form.Add("execution", "e1s1")
-	form.Add("_eventId", "submit")
-	form.Add("submit", "ZALOGUJ")
+func (s *Service) handleUserCreated(ctx context.Context, message *pubsub.Message) {
+	defer message.Nack()
 
-	// TODO: Identify myself using the UserAgent
-	resp, err = cli.PostForm(uri.String(), form)
-	if err != nil && !strings.Contains(err.Error(), ErrAlreadySavedMsg) {
-		return "", errors.Wrap(err, "couldn't post login form")
-	}
-
-	parsed, err := url.Parse("https://usosweb.mimuw.edu.pl")
+	data, err := events.DecodeTextMessage(message)
 	if err != nil {
-		return "", errors.Wrap(err, "couldn't parse url for cookie extraction")
+		log.Println("Couldn't decode text message: ", err)
+		return
 	}
-	for _, cookie := range cli.Jar.Cookies(parsed) {
-		if cookie.Name == "PHPSESSID" {
-			return cookie.Value, nil
-		}
+
+	userID := string(data)
+
+	token, err := s.tokens.GenerateAuthorizationToken(ctx, userID)
+	if err != nil {
+		log.Println("Couldn't generate authorization token: ", err)
+		return
 	}
-	return "", errors.New("PHPSESSID cookie not found")
+
+	err = s.sender.SendNotification(ctx, userID,
+		fmt.Sprintf("Autoryzuj mnie do używania Twoich danych logowania: https://notifier.jacobmartins.com/credentials/authorization?token=%v", token))
+	if err != nil {
+		log.Println("Couldn't send notification: ", err)
+		return
+	}
+
+	message.Ack()
 }

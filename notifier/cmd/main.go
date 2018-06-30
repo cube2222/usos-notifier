@@ -19,7 +19,7 @@ func main() {
 	m := chi.NewMux()
 	m.Use(requestid.HTTPInjector)
 	m.Use(httplogger.HTTPInject)
-	m.HandleFunc("/webhook", s.HandleWebhookHTTP())
+	m.HandleFunc("/notifier/webhook", s.HandleWebhookHTTP())
 	log.Println("Serving...")
-	log.Fatal(http.ListenAndServeTLS(":443", "cert.crt", "cert.key", m))
+	log.Fatal(http.ListenAndServe(":8080",  m))
 }

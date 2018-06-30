@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifier
+  labels:
+    service: notifier
+spec:
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  replicas: 1
+  selector:
+    matchLabels:
+      service: notifier
+  template:
+    metadata:
+      labels:
+        service: notifier
+    spec:
+      volumes:
+      - name: service-account-file
+        secret:
+          secretName: credits-service-account # temporary
+      containers:
+      - name: notifier
+        image: cube2222/notifier:0.0.2
+        ports:
+        - containerPort: 8080
+        - containerPort: 6666
+        resources:
+          requests:
+            cpu: 25m
+        volumeMounts:
+        - name: service-account-file
+          mountPath: /var/secrets/google
+        env:
+          - name: GOOGLE_APPLICATION_CREDENTIALS
+            value: /var/secrets/google/serviceaccount.json
+          - name: MESSENGER_API
+            valueFrom:
+              secretKeyRef:
+                name: messenger-api
+                key: messenger-api
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notifier
+  labels:
+    service: notifier
+spec:
+  selector:
+    service: notifier
+  ports:
+  - protocol: TCP
+    port: 8080
+    name: http

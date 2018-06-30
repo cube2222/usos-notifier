@@ -28,12 +28,12 @@ type Service struct {
 }
 
 func NewService() (*Service, error) {
-	ds, err := datastore.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile("C:/Development/Projects/Go/src/github.com/cube2222/usos-notifier/usos-notifier-9a2e44d7f26b.json"))
+	ds, err := datastore.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't create datastore client")
 	}
 
-	cli, err := pubsub.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile("C:/Development/Projects/Go/src/github.com/cube2222/usos-notifier/usos-notifier-9a2e44d7f26b.json"))
+	cli, err := pubsub.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't create pubsub client")
 	}
@@ -45,7 +45,9 @@ func NewService() (*Service, error) {
 		cli:    http.DefaultClient,
 	}
 
-	go log.Fatal(cli.Subscription("sender").Receive(context.Background(), service.handleMessageSendEvent))
+	go func() {
+		log.Fatal(cli.Subscription("sender").Receive(context.Background(), service.handleMessageSendEvent))
+	}()
 
 	return service, nil
 }
@@ -219,9 +221,9 @@ func (s *Service) handleMessageSendEvent(ctx context.Context, message *pubsub.Me
 
 	event := notifier.SendNotificationEvent{}
 
-	err := json.Unmarshal(message.Data, &event)
+	err := events.DecodeJSONMessage(message, &event)
 	if err != nil {
-		log.Println("couldn't unmarshal send message event: ", err)
+		log.Println("couldn't pubsub message: ", err)
 		return
 	}
 

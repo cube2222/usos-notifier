@@ -1,7 +1,0 @@
-gcloud config set project usos-notifier
-gcloud config set compute/zone europe-west3-b
-gcloud container clusters get-credentials cluster-1 --zone europe-west3-b
-kubectl create clusterrolebinding add-on-cluster-admin --clusterrole=cluster-admin --serviceaccount=kube-system:default
-helm init
-kubectl create clusterrolebinding cluster-admin-binding-jakub.wit.martin@gmail.com --clusterrole=cluster-admin --user=jakub.wit.martin@gmail.com
-kubectl create secret tls tls-secret --key cert.key --cert cert.crt

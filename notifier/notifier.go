@@ -2,8 +2,11 @@ package notifier
 
 import (
 	"context"
+	"encoding/json"
 
 	"cloud.google.com/go/pubsub"
+	"github.com/cube2222/usos-notifier/common/events"
+	"github.com/pkg/errors"
 )
 
 type SendNotificationEvent struct {
@@ -12,13 +15,28 @@ type SendNotificationEvent struct {
 }
 
 type NotificationSender struct {
-	pubsub *pubsub.Client
+	publisher *events.Publisher
 }
 
-func NewNotificationSender() {
-
+func NewNotificationSender(client *pubsub.Client) *NotificationSender {
+	return &NotificationSender{
+		publisher: events.NewPublisher(client),
+	}
 }
 
-func (ns *NotificationSender) SendNotification(ctx context.Context, userID string, message string) {
+func (ns *NotificationSender) SendNotification(ctx context.Context, userID string, message string) error {
+	data, err := json.Marshal(SendNotificationEvent{
+		UserID:  userID,
+		Message: message,
+	})
+	if err != nil {
+		return errors.Wrap(err, "couldn't marshal send notification event")
+	}
 
+	err = ns.publisher.PublishEvent(ctx, "notifications", nil, string(data))
+	if err != nil {
+		return errors.Wrap(err, "couldn't publish event")
+	}
+
+	return nil
 }

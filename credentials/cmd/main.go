@@ -3,11 +3,12 @@ package main
 import (
 	"log"
 	"net"
+	"net/http"
 
 	"github.com/cube2222/grpc-utils/health"
-	"github.com/cube2222/grpc-utils/requestid"
 	"github.com/cube2222/usos-notifier/credentials"
 	"github.com/cube2222/usos-notifier/credentials/service"
+	"github.com/go-chi/chi"
 	"github.com/grpc-ecosystem/go-grpc-middleware"
 	grpczap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
 	"github.com/grpc-ecosystem/go-grpc-middleware/tags"
@@ -26,7 +27,6 @@ func main() {
 		grpc.UnaryInterceptor(
 			grpc_middleware.ChainUnaryServer(
 				grpc_ctxtags.UnaryServerInterceptor(),
-				requestid.ServerInterceptor(),
 				grpczap.UnaryServerInterceptor(logger),
 			),
 		),
@@ -39,9 +39,19 @@ func main() {
 
 	credentials.RegisterCredentialsServer(server, s)
 
-	lis, err := net.Listen("tcp", ":8080")
+	lis, err := net.Listen("tcp", ":8081")
 
-	log.Println("Serving...")
-	go log.Fatal(server.Serve(lis))
+	go func() {
+		log.Fatal(server.Serve(lis))
+	}()
+
+	m := chi.NewMux()
+	m.HandleFunc("/credentials/authorization", s.ServeAuthorizationPageHTTP)
+	m.HandleFunc("/credentials/authorize", s.HandleAuthorizeHTTP)
+
+	go func() {
+		log.Fatal(http.ListenAndServe(":8080", m))
+	}() // TODO: TLS
+
 	health.LaunchHealthCheckHandler()
 }

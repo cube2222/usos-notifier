@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"log"
-	"os"
 	"testing"
 
 	"cloud.google.com/go/datastore"
@@ -47,7 +46,7 @@ func TestService_GetSession(t *testing.T) {
 	service := setupDefaultService()
 
 	sess, err := service.GetSession(context.Background(), &credentials.GetSessionRequest{
-		Userid: "me",
+		Userid: "bb4907ba-f8f2-45aa-b899-b16f7f4348ba",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +55,7 @@ func TestService_GetSession(t *testing.T) {
 	log.Printf("%+v", *sess)
 }
 
-func TestService_login(t *testing.T) {
+/*func TestService_login(t *testing.T) {
 	service := setupDefaultService()
 
 	sess, err := service.login(os.Getenv("usos_user"), os.Getenv("usos_pass"))
@@ -65,5 +64,5 @@ func TestService_login(t *testing.T) {
 	}
 
 	log.Println(sess)
-}
+}*/
 
