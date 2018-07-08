@@ -51,7 +51,7 @@ func main() {
 
 	go func() {
 		log.Fatal(http.ListenAndServe(":8080", m))
-	}() // TODO: TLS
+	}()
 
 	health.LaunchHealthCheckHandler()
 }

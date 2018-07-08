@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"log"
+	"os"
 	"testing"
 
 	"cloud.google.com/go/datastore"
@@ -22,7 +23,7 @@ func setupDefaultService() *Service {
 	if err != nil {
 		log.Fatal(err)
 	}
-	ds, err := datastore.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile("C:/Development/Projects/Go/src/github.com/cube2222/usos-notifier/usos-notifier-9a2e44d7f26b.json"))
+	ds, err := datastore.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -46,7 +47,7 @@ func TestService_GetSession(t *testing.T) {
 	service := setupDefaultService()
 
 	sess, err := service.GetSession(context.Background(), &credentials.GetSessionRequest{
-		Userid: "bb4907ba-f8f2-45aa-b899-b16f7f4348ba",
+		Userid: "",
 	})
 	if err != nil {
 		t.Fatal(err)
