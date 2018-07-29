@@ -48,7 +48,7 @@ func main() {
 	node := nodes[0]
 
 	scores := make(map[string]*parser.Score)
-	err = parser.GetScores(scores, "", node)
+	err = parser.getScores(scores, "", node)
 	if err != nil {
 		log.Fatal(err)
 	}

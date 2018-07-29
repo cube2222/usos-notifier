@@ -2,16 +2,41 @@ package parser
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/cube2222/usos-notifier/marks"
 	"github.com/pkg/errors"
 	"golang.org/x/net/html"
 )
 
-func GetScores(scores map[string]*Score, prefix string, node *html.Node) error {
+func GetScores(r io.Reader) (map[string]*marks.Score, error) {
+	doc, err := goquery.NewDocumentFromReader(r)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	nodes := doc.Find(fmt.Sprintf("[id^='childrenof']")).Nodes
+	if len(nodes) < 1 {
+		log.Println(len(nodes))
+		return nil, errors.Wrap(err, "couldn't get top-level childrenof*")
+	}
+	node := nodes[0]
+
+	scores := make(map[string]*marks.Score)
+	err = getScores(scores, "", node)
+	if err != nil {
+		return nil, errors.Wrap(err, "couldn't get scores")
+	}
+
+	return scores, nil
+}
+
+func getScores(scores map[string]*marks.Score, prefix string, node *html.Node) error {
 	foundSubTrees := false
 
 	children := getElementNodeChildren(node)
@@ -33,7 +58,7 @@ func GetScores(scores map[string]*Score, prefix string, node *html.Node) error {
 			if err != nil {
 				return errors.Wrap(err, "couldn't get category name")
 			}
-			err = GetScores(scores, fmt.Sprintf("%s%s/", prefix, category), cur)
+			err = getScores(scores, fmt.Sprintf("%s%s/", prefix, category), cur)
 			if err != nil {
 				return errors.Wrap(err, "couldn't get scores")
 			}
@@ -98,13 +123,7 @@ func extractCategoryName(node *html.Node) (name string, err error) {
 
 var maxRegexp = regexp.MustCompile("[0-9]+(\\.[0-9]+)?")
 
-type Score struct {
-	Unknown     bool
-	Hidden      bool
-	Actual, Max float64
-}
-
-func getSingleScore(node *html.Node) (name string, score *Score, err error) {
+func getSingleScore(node *html.Node) (name string, score *marks.Score, err error) {
 	defer func() {
 		if recErr := recover(); recErr != nil {
 			err = errors.Errorf("invalid score structure: %v", recErr)
@@ -130,13 +149,13 @@ func getSingleScore(node *html.Node) (name string, score *Score, err error) {
 
 	scoreString := children[2].FirstChild.NextSibling.FirstChild.Data
 	if scoreString == "brak wyniku" {
-		return name, &Score{
+		return name, &marks.Score{
 			Unknown: true,
 			Max:     max,
 		}, nil
 	}
 	if scoreString == "wynik jest ukryty" {
-		return name, &Score{
+		return name, &marks.Score{
 			Hidden: true,
 			Max:    max,
 		}, nil
@@ -150,7 +169,7 @@ func getSingleScore(node *html.Node) (name string, score *Score, err error) {
 		return "", nil, errors.Wrap(err, "invalid actual score")
 	}
 
-	return name, &Score{
+	return name, &marks.Score{
 		Actual: actual,
 		Max:    max,
 	}, nil
