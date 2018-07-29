@@ -1,4 +1,4 @@
-package main
+package parser
 
 import (
 	"os"
@@ -21,39 +21,50 @@ func Test_getSingleScore(t *testing.T) {
 	}{
 		// TODO: Add test cases.
 		{
-			name: "With a correct known score, I want a correct actual and max score as well as the name",
+			name: "With a correct unknown score, I want a correct actual and max score as well as the name",
 			args: args{
-				filename: "single.html",
+				filename: "fixtures/single/single.html",
 			},
 			wantName: "zadanie 1",
 			wantScore: &Score{
-				known:  true,
-				actual: 9.3,
-				max:    10.2,
+				Actual: 9.3,
+				Max:    10.2,
 			},
 			wantErr: false,
 		},
 		{
 			name: "With a correct unknown score, I want a correct name, max score, and information that it's unknown",
 			args: args{
-				filename: "unknown.html",
+				filename: "fixtures/single/unknown.html",
 			},
 			wantName: "zadanie 1",
 			wantScore: &Score{
-				known: false,
-				max:   10.2,
+				Unknown: true,
+				Max:     10.2,
 			},
 			wantErr: false,
 		},
 		{
-			name: "With a correct known score and a description present, I want a correct name, max score, and information that it's unknown",
+			name: "With a correct unknown score and a description present, I want a correct actual and max score as well as the name",
 			args: args{
-				filename: "with_description.html",
+				filename: "fixtures/single/with_description.html",
 			},
 			wantName: "Liczba nieobecności nieuspr. na ćwiczeniach",
 			wantScore: &Score{
-				known: false,
-				max:   40,
+				Unknown: true,
+				Max:     40,
+			},
+			wantErr: false,
+		},
+		{
+			name: "With a hidden score, I want a correct name, max score, and information that it's hidden.",
+			args: args{
+				filename: "fixtures/single/hidden.html",
+			},
+			wantName: "Zadanie I.1",
+			wantScore: &Score{
+				Hidden: true,
+				Max:    15.0,
 			},
 			wantErr: false,
 		},
@@ -90,7 +101,7 @@ func Test_extractCategoryName(t *testing.T) {
 		{
 			name: "With a correct category name, I want to get it",
 			args: args{
-				filename: "category.html",
+				filename: "fixtures/category/category.html",
 			},
 			want:    "małe kolokwium",
 			wantErr: false,
