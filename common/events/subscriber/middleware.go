@@ -2,25 +2,51 @@ package subscriber
 
 import (
 	"context"
-	"fmt"
+	"time"
 
-	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
-	"github.com/satori/go.uuid"
+	"github.com/cube2222/grpc-utils/logger"
+	"github.com/cube2222/grpc-utils/requestid"
 )
+
+func WithLogger(log logger.Logger) func(next HandlerFunc) HandlerFunc {
+	return func(next HandlerFunc) HandlerFunc {
+		return func(ctx context.Context, msg *Message) error {
+			return next(logger.Inject(ctx, log), msg)
+		}
+	}
+}
+
+func WithLogging(keys ...string) func(next HandlerFunc) HandlerFunc {
+	return func(next HandlerFunc) HandlerFunc {
+		return func(ctx context.Context, msg *Message) error {
+			curRequestLogger := logger.FromContext(ctx)
+
+			start := time.Now()
+			err := next(ctx, msg)
+			duration := time.Since(start)
+
+			if err != nil {
+				curRequestLogger = curRequestLogger.With(
+					logger.NewField("err", err.Error()),
+				)
+			}
+
+			curRequestLogger.With(
+				logger.NewField("duration", duration),
+			).Printf("Finished handling event.")
+
+			return err
+		}
+	}
+}
 
 func WithRequestID(next HandlerFunc) HandlerFunc {
 	return func(ctx context.Context, msg *Message) error {
-		requestID, ok := msg.Attributes["request-id"]
+		requestID, ok := msg.Attributes[requestid.Key]
 		if !ok {
-			id, err := uuid.NewV4()
-			if err != nil {
-				ctxzap.Extract(ctx).Error(fmt.Sprintf("couldn't generate uuid %s", err))
-				requestID = "err"
-			}
-			requestID = id.String()
+			requestID = requestid.GenerateRequestID()
 		}
-
-		ctx = context.WithValue(ctx, "request-id", requestID)
+		ctx = context.WithValue(ctx, requestid.Key, requestID)
 
 		return next(ctx, msg)
 	}

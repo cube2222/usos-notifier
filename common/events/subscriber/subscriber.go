@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"cloud.google.com/go/pubsub"
-	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 )
 
 type Message struct {
@@ -43,7 +42,6 @@ func (cli *SubscriptionClient) Subscribe(ctx context.Context, eventType string, 
 		})
 		if err != nil {
 			msg.Nack()
-			ctxzap.Extract(ctx).Error(err.Error())
 		}
 		msg.Ack()
 	})
