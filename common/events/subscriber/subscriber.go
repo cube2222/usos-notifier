@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"cloud.google.com/go/pubsub"
+	"github.com/cube2222/grpc-utils/logger"
+	"github.com/cube2222/usos-notifier/common/customerrors"
 )
 
 type Message struct {
@@ -41,6 +43,10 @@ func (cli *SubscriptionClient) Subscribe(ctx context.Context, eventType string, 
 			Attributes: msg.Attributes,
 		})
 		if err != nil {
+			if customerrors.IsPermanent(err) {
+				msg.Ack()
+				logger.FromContext(ctx).Errorf("Permanent error: %v", err)
+			}
 			msg.Nack()
 		}
 		msg.Ack()

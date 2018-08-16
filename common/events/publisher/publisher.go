@@ -26,6 +26,10 @@ func NewPublisher(cli *pubsub.Client) *Publisher {
 }
 
 func (p *Publisher) PublishEvent(ctx context.Context, eventType string, metadata map[string]string, message string) error {
+	if metadata == nil {
+		metadata = make(map[string]string)
+	}
+
 	publisher := p.publishEvent
 
 	for i := len(p.middleware) - 1; i >= 0; i-- {

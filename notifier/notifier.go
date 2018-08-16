@@ -1,16 +1,10 @@
 package notifier
 
-import "context"
+import (
+	"context"
 
-type UserID string
-
-func NewUserID(id string) UserID {
-	return UserID(id)
-}
-
-func (id UserID) String() string {
-	return string(id)
-}
+	"github.com/cube2222/usos-notifier/common/users"
+)
 
 type MessengerID string
 
@@ -23,7 +17,7 @@ func (id MessengerID) String() string {
 }
 
 type UserMapping interface {
-	CreateUser(ctx context.Context, messengerID MessengerID) (UserID, error)
-	GetMessengerID(ctx context.Context, userID UserID) (MessengerID, error)
-	GetUserID(ctx context.Context, messengerID MessengerID) (UserID, error)
+	CreateUser(ctx context.Context, messengerID MessengerID) (users.UserID, error)
+	GetMessengerID(ctx context.Context, userID users.UserID) (MessengerID, error)
+	GetUserID(ctx context.Context, messengerID MessengerID) (users.UserID, error)
 }

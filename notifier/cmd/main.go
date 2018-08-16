@@ -6,7 +6,9 @@ import (
 
 	"github.com/cube2222/grpc-utils/logger"
 	"github.com/cube2222/grpc-utils/requestid"
+
 	"github.com/cube2222/usos-notifier/notifier/service"
+
 	"github.com/go-chi/chi"
 )
 

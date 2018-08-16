@@ -13,14 +13,17 @@ import (
 	"net/url"
 	"os"
 
-	"cloud.google.com/go/datastore"
-	"cloud.google.com/go/pubsub"
 	"github.com/cube2222/grpc-utils/logger"
 	"github.com/cube2222/grpc-utils/requestid"
+	"github.com/cube2222/usos-notifier/common/customerrors"
+
 	"github.com/cube2222/usos-notifier/common/events/publisher"
 	"github.com/cube2222/usos-notifier/common/events/subscriber"
 	"github.com/cube2222/usos-notifier/notifier"
-	"github.com/cube2222/usos-notifier/notifier/service/mapping"
+	"github.com/cube2222/usos-notifier/notifier/service/datastore"
+
+	gdatastore "cloud.google.com/go/datastore"
+	"cloud.google.com/go/pubsub"
 	"github.com/pkg/errors"
 	"google.golang.org/api/option"
 )
@@ -33,7 +36,7 @@ type Service struct {
 }
 
 func NewService() (*Service, error) {
-	ds, err := datastore.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
+	ds, err := gdatastore.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't create datastore client")
 	}
@@ -44,7 +47,7 @@ func NewService() (*Service, error) {
 	}
 
 	service := &Service{
-		userMapping: mapping.NewDatastoreUserMapping(ds),
+		userMapping: datastore.NewUserMapping(ds),
 		pubsub:      cli,
 		publisher: publisher.
 			NewPublisher(cli).
@@ -134,7 +137,7 @@ func (s *Service) handleWebhook(ctx context.Context, webhook MessageEvent) error
 
 	userID, err := s.userMapping.GetUserID(ctx, webhook.Sender.ID)
 	if err != nil {
-		if errors.Cause(err) == datastore.ErrNoSuchEntity {
+		if customerrors.IsPermanent(err) {
 			userExists = false
 		} else {
 			return errors.Wrap(err, "couldn't get userID")

@@ -4,27 +4,28 @@ import (
 	"context"
 	"encoding/json"
 
-	"cloud.google.com/go/pubsub"
 	"github.com/cube2222/usos-notifier/common/events/publisher"
+	"github.com/cube2222/usos-notifier/common/users"
+
 	"github.com/pkg/errors"
 )
 
 type SendNotificationEvent struct {
-	UserID  UserID `json:"user_id"`
-	Message string `json:"message"`
+	UserID  users.UserID `json:"user_id"`
+	Message string       `json:"message"`
 }
 
 type NotificationSender struct {
 	publisher *publisher.Publisher
 }
 
-func NewNotificationSender(client *pubsub.Client) *NotificationSender {
+func NewNotificationSender(publisher *publisher.Publisher) *NotificationSender {
 	return &NotificationSender{
-		publisher: publisher.NewPublisher(client),
+		publisher: publisher,
 	}
 }
 
-func (ns *NotificationSender) SendNotification(ctx context.Context, userID UserID, message string) error {
+func (ns *NotificationSender) SendNotification(ctx context.Context, userID users.UserID, message string) error {
 	data, err := json.Marshal(SendNotificationEvent{
 		UserID:  userID,
 		Message: message,
