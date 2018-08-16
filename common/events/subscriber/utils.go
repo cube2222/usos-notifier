@@ -4,11 +4,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 
-	"cloud.google.com/go/pubsub"
 	"github.com/pkg/errors"
 )
 
-func DecodeJSONMessage(message *pubsub.Message, dst interface{}) error {
+func DecodeJSONMessage(message *Message, dst interface{}) error {
 	data, err := DecodeTextMessage(message)
 	if err != nil {
 		return errors.Wrap(err, "couldn't base64 decode message")
@@ -22,6 +21,6 @@ func DecodeJSONMessage(message *pubsub.Message, dst interface{}) error {
 	return nil
 }
 
-func DecodeTextMessage(message *pubsub.Message) ([]byte, error) {
+func DecodeTextMessage(message *Message) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(string(message.Data))
 }

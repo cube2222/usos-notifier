@@ -31,8 +31,15 @@ func WithLogging(keys ...string) func(next HandlerFunc) HandlerFunc {
 				)
 			}
 
+			var fields []logger.Field
+			for key, value := range msg.Attributes {
+				fields = append(fields, logger.NewField(key, value))
+			}
+
 			curRequestLogger.With(
 				logger.NewField("duration", duration),
+			).With(
+				fields...,
 			).Printf("Finished handling event.")
 
 			return err

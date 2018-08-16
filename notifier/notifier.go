@@ -1,42 +1,29 @@
 package notifier
 
-import (
-	"context"
-	"encoding/json"
+import "context"
 
-	"cloud.google.com/go/pubsub"
-	"github.com/cube2222/usos-notifier/common/events/publisher"
-	"github.com/pkg/errors"
-)
+type UserID string
 
-type SendNotificationEvent struct {
-	UserID  string `json:"user_id"`
-	Message string `json:"message"`
+func NewUserID(id string) UserID {
+	return UserID(id)
 }
 
-type NotificationSender struct {
-	publisher *publisher.Publisher
+func (id UserID) String() string {
+	return string(id)
 }
 
-func NewNotificationSender(client *pubsub.Client) *NotificationSender {
-	return &NotificationSender{
-		publisher: publisher.NewPublisher(client),
-	}
+type MessengerID string
+
+func NewMessengerID(id string) MessengerID {
+	return MessengerID(id)
 }
 
-func (ns *NotificationSender) SendNotification(ctx context.Context, userID string, message string) error {
-	data, err := json.Marshal(SendNotificationEvent{
-		UserID:  userID,
-		Message: message,
-	})
-	if err != nil {
-		return errors.Wrap(err, "couldn't marshal send notification event")
-	}
+func (id MessengerID) String() string {
+	return string(id)
+}
 
-	err = ns.publisher.PublishEvent(ctx, "notifications", nil, string(data))
-	if err != nil {
-		return errors.Wrap(err, "couldn't publish event")
-	}
-
-	return nil
+type UserMapping interface {
+	CreateUser(ctx context.Context, messengerID MessengerID) (UserID, error)
+	GetMessengerID(ctx context.Context, userID UserID) (MessengerID, error)
+	GetUserID(ctx context.Context, messengerID MessengerID) (UserID, error)
 }
