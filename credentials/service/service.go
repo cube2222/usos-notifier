@@ -1,7 +1,6 @@
 package service
 
 import (
-	"encoding/base64"
 	"fmt"
 	"html/template"
 	"log"
@@ -9,13 +8,19 @@ import (
 	"os"
 	"regexp"
 
-	"cloud.google.com/go/datastore"
-	"cloud.google.com/go/pubsub"
+	"github.com/cube2222/grpc-utils/logger"
+	"github.com/cube2222/grpc-utils/requestid"
+	"github.com/cube2222/usos-notifier/common/events/publisher"
+
 	"github.com/cube2222/usos-notifier/common/events/subscriber"
+	"github.com/cube2222/usos-notifier/common/users"
 	"github.com/cube2222/usos-notifier/credentials"
 	"github.com/cube2222/usos-notifier/credentials/resources"
-	"github.com/cube2222/usos-notifier/credentials/service/tokens"
+	"github.com/cube2222/usos-notifier/credentials/service/datastore"
 	"github.com/cube2222/usos-notifier/notifier"
+
+	gdatastore "cloud.google.com/go/datastore"
+	"cloud.google.com/go/pubsub"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
@@ -24,10 +29,8 @@ import (
 )
 
 type Service struct {
-	ds  *datastore.Client
-	kms *cloudkms.Service
-
-	tokens *tokens.Tokens
+	creds  credentials.CredentialsStorage
+	tokens credentials.TokenStorage
 	sender *notifier.NotificationSender
 
 	tmpl        *template.Template
@@ -35,28 +38,24 @@ type Service struct {
 }
 
 func NewService() (*Service, error) {
-	cli, err := google.DefaultClient(context.Background(), cloudkms.CloudPlatformScope)
+	// TODO: Create all those outer dependencies in main
+	httpCli, err := google.DefaultClient(context.Background(), cloudkms.CloudPlatformScope)
 	if err != nil {
 		log.Fatal(err)
 		return nil, errors.Wrap(err, "couldn't setup google default http client")
 	}
-
-	kms, err := cloudkms.New(cli)
+	kms, err := cloudkms.New(httpCli)
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't create cloud kms client")
 	}
-	ds, err := datastore.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
+	ds, err := gdatastore.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't create datastore client")
 	}
-	pubsub, err := pubsub.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
+	pubsubCli, err := pubsub.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't create datastore client")
 	}
-
-	tokens := tokens.NewTokens(ds)
-
-	sender := notifier.NewNotificationSender(pubsub)
 
 	data, err := resources.Asset("authorize.html")
 	if err != nil {
@@ -70,63 +69,44 @@ func NewService() (*Service, error) {
 	tokenRegexp := regexp.MustCompile("^[0-9]+$")
 
 	service := &Service{
-		ds:          ds,
-		kms:         kms,
-		tokens:      tokens,
-		sender:      sender,
+		creds:  datastore.NewCredentialsStorage(ds, kms),
+		tokens: datastore.NewTokens(ds),
+		sender: notifier.NewNotificationSender(
+			publisher.
+				NewPublisher(pubsubCli).
+				Use(publisher.WithRequestID),
+		),
 		tmpl:        tmpl,
 		tokenRegexp: tokenRegexp,
 	}
 
 	go func() {
-		log.Fatal(pubsub.Subscription("credentials-notifier-user_created").Receive(context.Background(), service.handleUserCreated))
+		log.Fatal(
+			subscriber.
+				NewSubscriptionClient(pubsubCli).
+				Subscribe(
+					context.Background(),
+					"credentials-notifier-user_created",
+					subscriber.Chain(
+						service.handleUserCreated,
+						subscriber.WithLogger(logger.NewStdLogger()),
+						subscriber.WithRequestID,
+						subscriber.WithLogging(requestid.Key),
+					),
+				),
+		)
 	}()
 
 	return service, nil
 }
 
-type Encrypted struct {
-	UserAndPassword string
-}
-
-var encryptionKey = fmt.Sprintf("projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s",
-	"usos-notifier", "global", "credentials", "credentials")
-
-// TODO: Errors should use grpc error code package
 func (s *Service) GetSession(ctx context.Context, r *credentials.GetSessionRequest) (*credentials.GetSessionResponse, error) {
-	key := datastore.NameKey("credentials", r.Userid, nil)
-
-	encrypted := Encrypted{}
-
-	err := s.ds.Get(ctx, key, &encrypted)
+	creds, err := s.creds.GetCredentials(ctx, users.UserID(r.Userid))
 	if err != nil {
-		return nil, errors.Wrap(err, "couldn't get encrypted credentials")
+		return nil, errors.Wrap(err, "couldn't get credentials")
 	}
 
-	decryptRequest := cloudkms.DecryptRequest{
-		AdditionalAuthenticatedData: base64.StdEncoding.EncodeToString([]byte("something")),
-		Ciphertext:                  encrypted.UserAndPassword,
-	}
-
-	res, err := s.kms.Projects.Locations.KeyRings.CryptoKeys.
-		Decrypt(encryptionKey, &decryptRequest).
-		Context(ctx).
-		Do()
-	if err != nil {
-		return nil, errors.Wrap(err, "couldn't decrypt credentials")
-	}
-
-	decrypted, err := base64.StdEncoding.DecodeString(res.Plaintext)
-	if err != nil {
-		return nil, errors.Wrap(err, "couldn't base64 decode credentials")
-	}
-
-	creds, err := decodeUserAndPassword(string(decrypted))
-	if err != nil {
-		return nil, errors.Wrap(err, "couldn't decode credentials")
-	}
-
-	session, err := login(creds.User, creds.Password)
+	session, err := login(ctx, creds.User, creds.Password)
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't login")
 	}
@@ -134,31 +114,6 @@ func (s *Service) GetSession(ctx context.Context, r *credentials.GetSessionReque
 	return &credentials.GetSessionResponse{
 		Sessionid: session,
 	}, nil
-}
-
-func (s *Service) handleSignup(ctx context.Context, user, password, uuid string) error {
-	// TODO: Check if you can actually login using this before accepting
-	credsPhrase := encodeUserAndPassword(user, password)
-
-	encryptRequest := cloudkms.EncryptRequest{
-		AdditionalAuthenticatedData: base64.StdEncoding.EncodeToString([]byte("something")), //TODO: Change
-		Plaintext:                   base64.StdEncoding.EncodeToString([]byte(credsPhrase)),
-	}
-	res, err := s.kms.Projects.Locations.KeyRings.CryptoKeys.Encrypt(encryptionKey, &encryptRequest).Do()
-	if err != nil {
-		return errors.Wrap(err, "couldn't encrypt credentials")
-	}
-
-	key := datastore.NameKey("credentials", uuid, nil)
-
-	key, err = s.ds.Put(ctx, key, &Encrypted{
-		UserAndPassword: res.Ciphertext,
-	})
-	if err != nil {
-		return errors.Wrap(err, "couldn't save credentials")
-	}
-
-	return nil
 }
 
 func (s *Service) ServeAuthorizationPageHTTP(w http.ResponseWriter, r *http.Request) {
@@ -175,6 +130,8 @@ func (s *Service) ServeAuthorizationPageHTTP(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Service) HandleAuthorizeHTTP(w http.ResponseWriter, r *http.Request) {
+	log := logger.FromContext(r.Context())
+
 	username := r.PostFormValue("username")
 	password := r.PostFormValue("password")
 	token := r.PostFormValue("token")
@@ -198,10 +155,16 @@ func (s *Service) HandleAuthorizeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.handleSignup(r.Context(), username, password, userID)
-	// TODO: Better error information
+	_, err = login(r.Context(), username, password)
 	if err != nil {
-		s.writeAuthorizePage(token, "Error.", w, r)
+		s.writeAuthorizePage(token, "Invalid credentials.", w, r)
+		log.Println(err)
+		return
+	}
+
+	err = s.creds.SaveCredentials(r.Context(), userID, username, password)
+	if err != nil {
+		s.writeAuthorizePage(token, "Internal error.", w, r)
 		log.Println(err)
 		return
 	}
@@ -227,6 +190,8 @@ type SignupPageParams struct {
 }
 
 func (s *Service) writeAuthorizePage(token, message string, w http.ResponseWriter, r *http.Request) {
+	log := logger.FromContext(r.Context())
+
 	params := SignupPageParams{
 		Token:          token,
 		MessagePresent: message != "",
@@ -243,29 +208,24 @@ func (s *Service) writeAuthorizePage(token, message string, w http.ResponseWrite
 	// TODO: Add links to the description of the app architecture and request the user to accept all terms. Checkboxes maybe
 }
 
-func (s *Service) handleUserCreated(ctx context.Context, message *pubsub.Message) {
-	defer message.Nack()
-
-	data, err := subscriber.DecodeTextMessage(message)
+func (s *Service) handleUserCreated(ctx context.Context, message *subscriber.Message) error {
+	text, err := subscriber.DecodeTextMessage(message)
 	if err != nil {
-		log.Println("Couldn't decode text message: ", err)
-		return
+		return errors.Wrap(err, "couldn't decode text message")
 	}
 
-	userID := string(data)
+	userID := users.NewUserID(string(text))
 
 	token, err := s.tokens.GenerateAuthorizationToken(ctx, userID)
 	if err != nil {
-		log.Println("Couldn't generate authorization token: ", err)
-		return
+		return errors.Wrap(err, "couldn't generate authorization token")
 	}
 
 	err = s.sender.SendNotification(ctx, userID,
 		fmt.Sprintf("Proszę autoryzuj mnie do używania Twoich danych logowania: https://notifier.jacobmartins.com/credentials/authorization?token=%v", token))
 	if err != nil {
-		log.Println("Couldn't send notification: ", err)
-		return
+		return errors.Wrap(err, "couldn't send notification")
 	}
 
-	message.Ack()
+	return nil
 }

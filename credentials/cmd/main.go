@@ -8,8 +8,10 @@ import (
 	"github.com/cube2222/grpc-utils/health"
 	"github.com/cube2222/grpc-utils/logger"
 	"github.com/cube2222/grpc-utils/requestid"
+
 	"github.com/cube2222/usos-notifier/credentials"
 	"github.com/cube2222/usos-notifier/credentials/service"
+
 	"github.com/go-chi/chi"
 	"github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
@@ -40,6 +42,9 @@ func main() {
 	}()
 
 	m := chi.NewMux()
+	m.Use(requestid.HTTPInterceptor)
+	m.Use(logger.HTTPInjector(logger.NewStdLogger(), requestid.Key))
+	m.Use(logger.HTTPLogger())
 	m.HandleFunc("/credentials/authorization", s.ServeAuthorizationPageHTTP)
 	m.HandleFunc("/credentials/authorize", s.HandleAuthorizeHTTP)
 

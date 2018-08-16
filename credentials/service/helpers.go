@@ -1,74 +1,23 @@
 package service
 
 import (
-	"fmt"
+	"context"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 )
 
-func encodeUserAndPassword(user, password string) string {
-	return fmt.Sprintf("%d-%s-%d-%s", len(user), user, len(password), password)
-}
-
-type Credentials struct {
-	User     string
-	Password string
-}
-
-func decodeUserAndPassword(encoded string) (*Credentials, error) {
-	i := strings.Index(encoded, "-")
-	if i == -1 {
-		return nil, errors.New("missing username length")
-	}
-	usernameLen, err := strconv.Atoi(encoded[:i])
-	if err != nil {
-		return nil, errors.Wrap(err, "invalid username length")
-	}
-
-	usernameBegin := i + 1
-	usernameEnd := usernameBegin + usernameLen
-
-	// +1 because of the dash after the username
-	if len(encoded) <= usernameEnd+1 {
-		return nil, errors.New("missing part of encoded username value")
-	}
-
-	passwordPart := encoded[usernameEnd+1:]
-
-	i = strings.Index(passwordPart, "-")
-	if i == -1 {
-		return nil, errors.New("missing password length")
-	}
-	passwordLen, err := strconv.Atoi(passwordPart[:i])
-	if err != nil {
-		return nil, errors.Wrap(err, "invalid password length")
-	}
-
-	passwordBegin := i + 1
-	passwordEnd := passwordBegin + passwordLen
-
-	if len(encoded) <= passwordEnd {
-		return nil, errors.New("missing part of encoded password value")
-	}
-
-	return &Credentials{
-		User:     encoded[usernameBegin:usernameEnd],
-		Password: passwordPart[passwordBegin:passwordEnd],
-	}, nil
-}
-
 var ErrAlreadySavedMsg = "Already saved."
 
-func login(user, password string) (string, error) {
+// Todo: Remove all those log.Fatals
+func login(ctx context.Context, user, password string) (string, error) {
 	uri, err := url.Parse("https://logowanie.uw.edu.pl/cas/login")
 	if err != nil {
 		return "", errors.Wrap(err, "couldn't parse request url")
@@ -104,7 +53,14 @@ func login(user, password string) (string, error) {
 		},
 	}
 
-	resp, err := cli.Get(uri.String())
+	req, err := http.NewRequest(http.MethodGet, uri.String(), nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	req = req.WithContext(ctx)
+
+	resp, err := cli.Do(req)
 	if err != nil {
 		log.Fatal(err)
 	}

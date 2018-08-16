@@ -1,4 +1,4 @@
-package tokens
+package datastore
 
 import (
 	"context"
@@ -6,25 +6,30 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/cube2222/usos-notifier/common/users"
+	"github.com/cube2222/usos-notifier/credentials"
+
 	"cloud.google.com/go/datastore"
 	"github.com/pkg/errors"
 )
+
+const tokenTable = "authorization_tokens"
 
 type Tokens struct {
 	ds *datastore.Client
 }
 
-func NewTokens(cli *datastore.Client) *Tokens {
+func NewTokens(cli *datastore.Client) credentials.TokenStorage {
 	return &Tokens{
 		ds: cli,
 	}
 }
 
-type UserID struct {
+type datastoreUserID struct {
 	UserID string `json:"user_id"`
 }
 
-func (t *Tokens) GenerateAuthorizationToken(ctx context.Context, userID string) (string, error) {
+func (t *Tokens) GenerateAuthorizationToken(ctx context.Context, userID users.UserID) (string, error) {
 	// TODO: Maybe add TTL, isn't that sensitive though.
 	n, err := rand.Int(rand.Reader, big.NewInt(1000000000000000))
 	if err != nil {
@@ -32,8 +37,8 @@ func (t *Tokens) GenerateAuthorizationToken(ctx context.Context, userID string) 
 	}
 	token := fmt.Sprintf("%d", n.Int64())
 
-	key := datastore.NameKey("authorization_tokens", token, nil)
-	_, err = t.ds.Put(ctx, key, &UserID{userID})
+	key := datastore.NameKey(tokenTable, token, nil)
+	_, err = t.ds.Put(ctx, key, &datastoreUserID{userID.String()})
 	if err != nil {
 		return "", errors.Wrap(err, "couldn't put authorization token into db")
 	}
@@ -41,20 +46,20 @@ func (t *Tokens) GenerateAuthorizationToken(ctx context.Context, userID string) 
 	return token, nil
 }
 
-func (t *Tokens) GetUserID(ctx context.Context, token string) (string, error) {
-	key := datastore.NameKey("authorization_tokens", token, nil)
+func (t *Tokens) GetUserID(ctx context.Context, token string) (users.UserID, error) {
+	key := datastore.NameKey(tokenTable, token, nil)
 
-	out := UserID{}
+	out := datastoreUserID{}
 	err := t.ds.Get(ctx, key, &out)
 	if err != nil {
 		return "", errors.Wrap(err, "couldn't get userID")
 	}
 
-	return out.UserID, nil
+	return users.NewUserID(out.UserID), nil
 }
 
 func (t *Tokens) InvalidateAuthorizationToken(ctx context.Context, token string) error {
-	key := datastore.NameKey("authorization_tokens", token, nil)
+	key := datastore.NameKey(tokenTable, token, nil)
 	err := t.ds.Delete(ctx, key)
 	if err != nil {
 		return errors.Wrap(err, "couldn't delete authorization token")
