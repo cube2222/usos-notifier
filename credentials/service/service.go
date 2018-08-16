@@ -11,7 +11,7 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"cloud.google.com/go/pubsub"
-	"github.com/cube2222/usos-notifier/common/events"
+	"github.com/cube2222/usos-notifier/common/events/subscriber"
 	"github.com/cube2222/usos-notifier/credentials"
 	"github.com/cube2222/usos-notifier/credentials/resources"
 	"github.com/cube2222/usos-notifier/credentials/service/tokens"
@@ -246,7 +246,7 @@ func (s *Service) writeAuthorizePage(token, message string, w http.ResponseWrite
 func (s *Service) handleUserCreated(ctx context.Context, message *pubsub.Message) {
 	defer message.Nack()
 
-	data, err := events.DecodeTextMessage(message)
+	data, err := subscriber.DecodeTextMessage(message)
 	if err != nil {
 		log.Println("Couldn't decode text message: ", err)
 		return

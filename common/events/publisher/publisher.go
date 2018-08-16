@@ -43,7 +43,7 @@ func (p *Publisher) publishEvent(ctx context.Context, eventType string, metadata
 
 	_, err := res.Get(ctx)
 
-	return errors.Wrap(err, "couldn't publish message")
+	return errors.Wrapf(err, "couldn't publish event of type %v", eventType)
 }
 
 func (p *Publisher) getTopic(topic string) *pubsub.Topic {

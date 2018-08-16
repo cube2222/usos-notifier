@@ -21,7 +21,6 @@ In this document. Whenever a resource is described to be created, it may be foll
 1. Create keychain credentials.
     * credentials: Cloud KMS CryptoKey Encrypter/Decrypter
 2. Create key credentials in this keychain.
-    * credentials: Cloud KMS CryptoKey Encrypter/Decrypter
 
 ## PubSub
 

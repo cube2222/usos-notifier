@@ -5,22 +5,22 @@ import (
 	"encoding/json"
 
 	"cloud.google.com/go/pubsub"
-	"github.com/cube2222/usos-notifier/common/events"
+	"github.com/cube2222/usos-notifier/common/events/publisher"
 	"github.com/pkg/errors"
 )
 
 type SendNotificationEvent struct {
-	UserID string `json:"user_id"`
+	UserID  string `json:"user_id"`
 	Message string `json:"message"`
 }
 
 type NotificationSender struct {
-	publisher *events.Publisher
+	publisher *publisher.Publisher
 }
 
 func NewNotificationSender(client *pubsub.Client) *NotificationSender {
 	return &NotificationSender{
-		publisher: events.NewPublisher(client),
+		publisher: publisher.NewPublisher(client),
 	}
 }
 

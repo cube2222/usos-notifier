@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/cube2222/grpc-utils/httplogger"
+	"github.com/cube2222/grpc-utils/logger"
 	"github.com/cube2222/grpc-utils/requestid"
 	"github.com/cube2222/usos-notifier/notifier/service"
 	"github.com/go-chi/chi"
@@ -17,9 +17,10 @@ func main() {
 	}
 
 	m := chi.NewMux()
-	m.Use(requestid.HTTPInjector)
-	m.Use(httplogger.HTTPInject)
-	m.HandleFunc("/notifier/webhook", s.HandleWebhookHTTP())
+	m.Use(requestid.HTTPInterceptor)
+	m.Use(logger.HTTPInjector(logger.NewStdLogger(), requestid.Key))
+	m.Use(logger.HTTPLogger())
+	m.HandleFunc("/notifier/webhook", s.HandleWebhookHTTP)
 	log.Println("Serving...")
-	log.Fatal(http.ListenAndServe(":8080",  m))
+	log.Fatal(http.ListenAndServe(":8080", m))
 }

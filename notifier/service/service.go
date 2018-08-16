@@ -15,7 +15,9 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"cloud.google.com/go/pubsub"
-	"github.com/cube2222/usos-notifier/common/events"
+	"github.com/cube2222/grpc-utils/logger"
+	"github.com/cube2222/usos-notifier/common/events/publisher"
+	"github.com/cube2222/usos-notifier/common/events/subscriber"
 	"github.com/cube2222/usos-notifier/notifier"
 	"github.com/pkg/errors"
 	"github.com/satori/go.uuid"
@@ -23,10 +25,10 @@ import (
 )
 
 type Service struct {
-	ds     *datastore.Client
-	pubsub *pubsub.Client
-	publisher *events.Publisher
-	cli    *http.Client
+	ds        *datastore.Client
+	pubsub    *pubsub.Client
+	publisher *publisher.Publisher
+	cli       *http.Client
 }
 
 func NewService() (*Service, error) {
@@ -43,8 +45,10 @@ func NewService() (*Service, error) {
 	service := &Service{
 		ds:     ds,
 		pubsub: cli,
-		publisher: events.NewPublisher(cli),
-		cli:    http.DefaultClient,
+		publisher: publisher.
+			NewPublisher(cli).
+			Use(publisher.WithRequestID),
+		cli: http.DefaultClient,
 	}
 
 	go func() {
@@ -62,40 +66,41 @@ type MessageEvent struct {
 		ID string `json:"id"`
 	} `json:"recipient"`
 	Timestamp int64 `json:"timestamp"`
-	Message struct {
-		Mid  string `json:"mid"`
-		Text string `json:"text"`
+	Message   struct {
+		Mid        string `json:"mid"`
+		Text       string `json:"text"`
 		QuickReply struct {
 			Payload string `json:"payload"`
 		} `json:"quick_reply"`
 	} `json:"message"`
 }
 
-func (s *Service) HandleWebhookHTTP() func(w http.ResponseWriter, r *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("hub.mode") == "subscribe" && r.URL.Query().Get("hub.verify_token") == "aowicb038qfi87uvabo8li7b32pv84743qv2" {
-			fmt.Fprint(w, r.URL.Query().Get("hub.challenge"))
-			return
-		}
+func (s *Service) HandleWebhookHTTP(w http.ResponseWriter, r *http.Request) {
+	log := logger.FromContext(r.Context())
 
-		webhook := Webhook{}
+	//TODO Change verify token to secret-based
+	if r.URL.Query().Get("hub.mode") == "subscribe" && r.URL.Query().Get("hub.verify_token") == "aowicb038qfi87uvabo8li7b32pv84743qv2" {
+		log.Printf("Handling challange.")
+		fmt.Fprint(w, r.URL.Query().Get("hub.challenge"))
+		return
+	}
 
-		err := json.NewDecoder(r.Body).Decode(&webhook)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprint(w, err)
-			return
-		}
+	webhook := Webhook{}
 
-		for _, page := range webhook.Entry {
-			for _, event := range page.Messaging {
-				err = s.handleWebhook(r.Context(), event)
-				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					// TODO: Proper zap logging
-					log.Println(err)
-					return
-				}
+	err := json.NewDecoder(r.Body).Decode(&webhook)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, err)
+		return
+	}
+
+	for _, page := range webhook.Entry {
+		for _, event := range page.Messaging {
+			err = s.handleWebhook(r.Context(), event)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				log.Println(err)
+				return
 			}
 		}
 	}
@@ -103,7 +108,7 @@ func (s *Service) HandleWebhookHTTP() func(w http.ResponseWriter, r *http.Reques
 
 type Webhook struct {
 	Object string `json:"object"`
-	Entry []struct {
+	Entry  []struct {
 		ID        string         `json:"id"`
 		Time      int64          `json:"time"`
 		Messaging []MessageEvent `json:"messaging"`
@@ -219,11 +224,13 @@ func (s *Service) getUserID(ctx context.Context, messengerID string) (string, er
 }
 
 func (s *Service) handleMessageSendEvent(ctx context.Context, message *pubsub.Message) {
+	log := logger.FromContext(ctx)
+
 	defer message.Nack()
 
 	event := notifier.SendNotificationEvent{}
 
-	err := events.DecodeJSONMessage(message, &event)
+	err := subscriber.DecodeJSONMessage(message, &event)
 	if err != nil {
 		log.Println("couldn't pubsub message: ", err)
 		return
@@ -247,7 +254,7 @@ func (s *Service) handleMessageSendEvent(ctx context.Context, message *pubsub.Me
 func (s *Service) sendMessage(ctx context.Context, messengerID string, body string) error {
 	message := struct {
 		MessagingType string `json:"messaging_type"`
-		Recipient struct {
+		Recipient     struct {
 			ID string `json:"id"`
 		} `json:"recipient"`
 		Message struct {
