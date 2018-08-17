@@ -20,6 +20,7 @@ import (
 	"github.com/cube2222/usos-notifier/notifier/service/datastore"
 )
 
+// TODO: Add config.
 func main() {
 	ds, err := gdatastore.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
 	if err != nil {
@@ -35,6 +36,7 @@ func main() {
 		publisher.
 			NewPublisher(pubsubCli).
 			Use(publisher.WithRequestID),
+		service.NewMessengerRateLimiter(100, 1000),
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -61,7 +63,7 @@ func main() {
 	m.Use(requestid.HTTPInterceptor)
 	m.Use(logger.HTTPInjector(logger.NewStdLogger(), requestid.Key))
 	m.Use(logger.HTTPLogger())
-	m.HandleFunc("/notifier/webhook", s.HandleWebhookHTTP)
+	m.HandleFunc("/notifier/webhook", s.HandleMessageReceivedWebhookHTTP)
 	log.Println("Serving...")
 	log.Fatal(http.ListenAndServe(":8080", m))
 }

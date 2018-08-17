@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -22,16 +23,18 @@ import (
 )
 
 type Service struct {
-	userMapping notifier.UserMapping
-	publisher   *publisher.Publisher
-	cli         *http.Client
+	userMapping          notifier.UserMapping
+	publisher            *publisher.Publisher
+	cli                  *http.Client
+	messengerRateLimiter *MessengerRateLimiter
 }
 
-func NewService(mapping notifier.UserMapping, publisher *publisher.Publisher) (*Service, error) {
+func NewService(mapping notifier.UserMapping, publisher *publisher.Publisher, limiter *MessengerRateLimiter) (*Service, error) {
 	service := &Service{
-		userMapping: mapping,
-		publisher:   publisher,
-		cli:         http.DefaultClient,
+		userMapping:          mapping,
+		publisher:            publisher,
+		cli:                  http.DefaultClient,
+		messengerRateLimiter: limiter,
 	}
 
 	return service, nil
@@ -63,7 +66,7 @@ type MessageEvent struct {
 	} `json:"message"`
 }
 
-func (s *Service) HandleWebhookHTTP(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleMessageReceivedWebhookHTTP(w http.ResponseWriter, r *http.Request) {
 	log := logger.FromContext(r.Context())
 
 	//TODO Change verify token to secret-based
@@ -84,7 +87,7 @@ func (s *Service) HandleWebhookHTTP(w http.ResponseWriter, r *http.Request) {
 
 	for _, page := range webhook.Entry {
 		for _, event := range page.Messaging {
-			err = s.handleWebhook(r.Context(), event)
+			err = s.handleMessageReceived(r.Context(), event)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				log.Println(err)
@@ -94,7 +97,32 @@ func (s *Service) HandleWebhookHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Service) handleWebhook(ctx context.Context, webhook MessageEvent) error {
+func (s *Service) handleMessageReceived(ctx context.Context, webhook MessageEvent) error {
+	log := logger.FromContext(ctx)
+
+	rateLimit, limited := s.messengerRateLimiter.LimitMessengerUser(webhook.Sender.ID)
+	if limited {
+		switch rateLimit.Reason {
+		case ReasonUser:
+			err := s.sendMessage(ctx, webhook.Sender.ID, fmt.Sprintf("Dostałem od Ciebie za dużo wiadomości. Spróbuj ponownie za %d minut.", int(rateLimit.TimeLeft.Round(time.Minute).Minutes())))
+			if err != nil {
+				log.Printf("Couldn't send rate limit notification: %v", err)
+			}
+		case ReasonGeneral:
+			err := s.sendMessage(ctx, webhook.Sender.ID, fmt.Sprintf("Jestem akurat przytłoczony ilością wiadomości od użytkowników. Spróbuj ponownie za %d minut.", int(rateLimit.TimeLeft.Round(time.Minute).Minutes())))
+			if err != nil {
+				log.Printf("Couldn't send rate limit notification: %v", err)
+			}
+		default:
+			err := s.sendMessage(ctx, webhook.Sender.ID, fmt.Sprintf("Nie mogę w tym momencie obsłużyć Twojej wiadomości. Spróbuj ponownie za %d minut.", int(rateLimit.TimeLeft.Round(time.Minute).Minutes())))
+			if err != nil {
+				log.Printf("Couldn't send rate limit notification: %v", err)
+			}
+		}
+		log.Printf("Rate limiting messenger user %v because of %v", webhook.Sender.ID, rateLimit.Reason)
+		return nil
+	}
+
 	userExists := true
 
 	userID, err := s.userMapping.GetUserID(ctx, webhook.Sender.ID)
