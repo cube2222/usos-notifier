@@ -19,7 +19,7 @@ type Tokens struct {
 	ds *datastore.Client
 }
 
-func NewTokens(cli *datastore.Client) credentials.TokenStorage {
+func NewTokenStorage(cli *datastore.Client) credentials.TokenStorage {
 	return &Tokens{
 		ds: cli,
 	}

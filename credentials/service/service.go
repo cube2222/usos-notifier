@@ -3,99 +3,38 @@ package service
 import (
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
-	"os"
 	"regexp"
 
 	"github.com/cube2222/grpc-utils/logger"
-	"github.com/cube2222/grpc-utils/requestid"
-	"github.com/cube2222/usos-notifier/common/events/publisher"
-
 	"github.com/cube2222/usos-notifier/common/events/subscriber"
 	"github.com/cube2222/usos-notifier/common/users"
 	"github.com/cube2222/usos-notifier/credentials"
-	"github.com/cube2222/usos-notifier/credentials/resources"
-	"github.com/cube2222/usos-notifier/credentials/service/datastore"
 	"github.com/cube2222/usos-notifier/notifier"
 
-	gdatastore "cloud.google.com/go/datastore"
-	"cloud.google.com/go/pubsub"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
-	"golang.org/x/oauth2/google"
-	"google.golang.org/api/cloudkms/v1"
-	"google.golang.org/api/option"
 )
 
 type Service struct {
 	creds  credentials.CredentialsStorage
 	tokens credentials.TokenStorage
-	sender *notifier.NotificationSender
+	sender notifier.NotificationSender
 
 	tmpl        *template.Template
 	tokenRegexp *regexp.Regexp
 }
 
-func NewService() (*Service, error) {
-	// TODO: Create all those outer dependencies in main
-	httpCli, err := google.DefaultClient(context.Background(), cloudkms.CloudPlatformScope)
-	if err != nil {
-		log.Fatal(err)
-		return nil, errors.Wrap(err, "couldn't setup google default http client")
-	}
-	kms, err := cloudkms.New(httpCli)
-	if err != nil {
-		return nil, errors.Wrap(err, "couldn't create cloud kms client")
-	}
-	ds, err := gdatastore.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
-	if err != nil {
-		return nil, errors.Wrap(err, "couldn't create datastore client")
-	}
-	pubsubCli, err := pubsub.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
-	if err != nil {
-		return nil, errors.Wrap(err, "couldn't create datastore client")
-	}
-
-	data, err := resources.Asset("authorize.html")
-	if err != nil {
-		log.Fatal(err)
-	}
-	tmpl, err := template.New("authorize.html").Parse(string(data))
-	if err != nil {
-		log.Fatal(err)
-	}
-
+func NewService(credentialsStorage credentials.CredentialsStorage, tokenStorage credentials.TokenStorage, notificationSender notifier.NotificationSender, authorizationTemplate *template.Template) (*Service, error) {
 	tokenRegexp := regexp.MustCompile("^[0-9]+$")
 
 	service := &Service{
-		creds:  datastore.NewCredentialsStorage(ds, kms),
-		tokens: datastore.NewTokens(ds),
-		sender: notifier.NewNotificationSender(
-			publisher.
-				NewPublisher(pubsubCli).
-				Use(publisher.WithRequestID),
-		),
-		tmpl:        tmpl,
+		creds:       credentialsStorage,
+		tokens:      tokenStorage,
+		sender:      notificationSender,
+		tmpl:        authorizationTemplate,
 		tokenRegexp: tokenRegexp,
 	}
-
-	go func() {
-		log.Fatal(
-			subscriber.
-				NewSubscriptionClient(pubsubCli).
-				Subscribe(
-					context.Background(),
-					"credentials-notifier-user_created",
-					subscriber.Chain(
-						service.handleUserCreated,
-						subscriber.WithLogger(logger.NewStdLogger()),
-						subscriber.WithRequestID,
-						subscriber.WithLogging(requestid.Key),
-					),
-				),
-		)
-	}()
 
 	return service, nil
 }
@@ -116,7 +55,7 @@ func (s *Service) GetSession(ctx context.Context, r *credentials.GetSessionReque
 	}, nil
 }
 
-func (s *Service) ServeAuthorizationPageHTTP(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleAuthorizationPageHTTP(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
 
 	matched := s.tokenRegexp.MatchString(token)
@@ -183,7 +122,7 @@ func (s *Service) HandleAuthorizeHTTP(w http.ResponseWriter, r *http.Request) {
 	// TODO: Write some success message
 }
 
-type SignupPageParams struct {
+type signupPageParams struct {
 	Token          string
 	MessagePresent bool
 	Message        string
@@ -192,7 +131,7 @@ type SignupPageParams struct {
 func (s *Service) writeAuthorizePage(token, message string, w http.ResponseWriter, r *http.Request) {
 	log := logger.FromContext(r.Context())
 
-	params := SignupPageParams{
+	params := signupPageParams{
 		Token:          token,
 		MessagePresent: message != "",
 		Message:        message,
@@ -208,7 +147,7 @@ func (s *Service) writeAuthorizePage(token, message string, w http.ResponseWrite
 	// TODO: Add links to the description of the app architecture and request the user to accept all terms. Checkboxes maybe
 }
 
-func (s *Service) handleUserCreated(ctx context.Context, message *subscriber.Message) error {
+func (s *Service) HandleUserCreatedEvent(ctx context.Context, message *subscriber.Message) error {
 	text, err := subscriber.DecodeTextMessage(message)
 	if err != nil {
 		return subscriber.NewNonRetryableError(errors.Wrap(err, "couldn't decode text message"))

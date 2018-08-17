@@ -1,22 +1,61 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
+	"os"
+
+	gdatastore "cloud.google.com/go/datastore"
+	"cloud.google.com/go/pubsub"
+	"github.com/cube2222/usos-notifier/common/events/subscriber"
+	"github.com/go-chi/chi"
+	"google.golang.org/api/option"
 
 	"github.com/cube2222/grpc-utils/logger"
 	"github.com/cube2222/grpc-utils/requestid"
 
+	"github.com/cube2222/usos-notifier/common/events/publisher"
 	"github.com/cube2222/usos-notifier/notifier/service"
-
-	"github.com/go-chi/chi"
+	"github.com/cube2222/usos-notifier/notifier/service/datastore"
 )
 
 func main() {
-	s, err := service.NewService()
+	ds, err := gdatastore.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
+	if err != nil {
+		log.Fatal("Couldn't create datastore client: ", err)
+	}
+	pubsubCli, err := pubsub.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
+	if err != nil {
+		log.Fatal("Couldn't create pubsub client: ", err)
+	}
+
+	s, err := service.NewService(
+		datastore.NewUserMapping(ds),
+		publisher.
+			NewPublisher(pubsubCli).
+			Use(publisher.WithRequestID),
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	go func() {
+		log.Fatal(
+			subscriber.
+				NewSubscriptionClient(pubsubCli).
+				Subscribe(
+					context.Background(),
+					"notifier-notifications",
+					subscriber.Chain(
+						s.HandleMessageSendEvent,
+						subscriber.WithLogger(logger.NewStdLogger()),
+						subscriber.WithRequestID,
+						subscriber.WithLogging(requestid.Key),
+					),
+				),
+		)
+	}()
 
 	m := chi.NewMux()
 	m.Use(requestid.HTTPInterceptor)

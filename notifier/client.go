@@ -15,17 +15,21 @@ type SendNotificationEvent struct {
 	Message string       `json:"message"`
 }
 
-type NotificationSender struct {
+type NotificationSender interface {
+	SendNotification(ctx context.Context, userID users.UserID, message string) error
+}
+
+type notificationSender struct {
 	publisher *publisher.Publisher
 }
 
-func NewNotificationSender(publisher *publisher.Publisher) *NotificationSender {
-	return &NotificationSender{
+func NewNotificationSender(publisher *publisher.Publisher) NotificationSender {
+	return &notificationSender{
 		publisher: publisher,
 	}
 }
 
-func (ns *NotificationSender) SendNotification(ctx context.Context, userID users.UserID, message string) error {
+func (ns *notificationSender) SendNotification(ctx context.Context, userID users.UserID, message string) error {
 	data, err := json.Marshal(SendNotificationEvent{
 		UserID:  userID,
 		Message: message,

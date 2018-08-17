@@ -8,68 +8,31 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
 
+	"github.com/pkg/errors"
+
 	"github.com/cube2222/grpc-utils/logger"
-	"github.com/cube2222/grpc-utils/requestid"
 
 	"github.com/cube2222/usos-notifier/common/events/publisher"
 	"github.com/cube2222/usos-notifier/common/events/subscriber"
 	"github.com/cube2222/usos-notifier/notifier"
-	"github.com/cube2222/usos-notifier/notifier/service/datastore"
-
-	gdatastore "cloud.google.com/go/datastore"
-	"cloud.google.com/go/pubsub"
-	"github.com/pkg/errors"
-	"google.golang.org/api/option"
 )
 
 type Service struct {
 	userMapping notifier.UserMapping
-	pubsub      *pubsub.Client
 	publisher   *publisher.Publisher
 	cli         *http.Client
 }
 
-func NewService() (*Service, error) {
-	ds, err := gdatastore.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
-	if err != nil {
-		return nil, errors.Wrap(err, "couldn't create datastore client")
-	}
-
-	cli, err := pubsub.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
-	if err != nil {
-		return nil, errors.Wrap(err, "couldn't create pubsub client")
-	}
-
+func NewService(mapping notifier.UserMapping, publisher *publisher.Publisher) (*Service, error) {
 	service := &Service{
-		userMapping: datastore.NewUserMapping(ds),
-		pubsub:      cli,
-		publisher: publisher.
-			NewPublisher(cli).
-			Use(publisher.WithRequestID),
-		cli: http.DefaultClient,
+		userMapping: mapping,
+		publisher:   publisher,
+		cli:         http.DefaultClient,
 	}
-
-	go func() {
-		log.Fatal(
-			subscriber.
-				NewSubscriptionClient(cli).
-				Subscribe(
-					context.Background(),
-					"notifier-notifications",
-					subscriber.Chain(
-						service.handleMessageSendEvent,
-						subscriber.WithLogger(logger.NewStdLogger()),
-						subscriber.WithRequestID,
-						subscriber.WithLogging(requestid.Key),
-					),
-				),
-		)
-	}()
 
 	return service, nil
 }
@@ -175,7 +138,7 @@ func (s *Service) handleWebhook(ctx context.Context, webhook MessageEvent) error
 	return nil
 }
 
-func (s *Service) handleMessageSendEvent(ctx context.Context, message *subscriber.Message) error {
+func (s *Service) HandleMessageSendEvent(ctx context.Context, message *subscriber.Message) error {
 	event := notifier.SendNotificationEvent{}
 
 	err := subscriber.DecodeJSONMessage(message, &event)
