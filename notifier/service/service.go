@@ -15,7 +15,6 @@ import (
 
 	"github.com/cube2222/grpc-utils/logger"
 	"github.com/cube2222/grpc-utils/requestid"
-	"github.com/cube2222/usos-notifier/common/customerrors"
 
 	"github.com/cube2222/usos-notifier/common/events/publisher"
 	"github.com/cube2222/usos-notifier/common/events/subscriber"
@@ -137,7 +136,7 @@ func (s *Service) handleWebhook(ctx context.Context, webhook MessageEvent) error
 
 	userID, err := s.userMapping.GetUserID(ctx, webhook.Sender.ID)
 	if err != nil {
-		if customerrors.IsPermanent(err) {
+		if err == notifier.ErrNotFound {
 			userExists = false
 		} else {
 			return errors.Wrap(err, "couldn't get userID")
@@ -181,12 +180,16 @@ func (s *Service) handleMessageSendEvent(ctx context.Context, message *subscribe
 
 	err := subscriber.DecodeJSONMessage(message, &event)
 	if err != nil {
-		return errors.Wrap(err, "couldn't decode json message")
+		return subscriber.NewNonRetryableError(errors.Wrap(err, "couldn't decode json message"))
 	}
 
 	messengerID, err := s.userMapping.GetMessengerID(ctx, event.UserID)
 	if err != nil {
-		return errors.Wrap(err, "couldn't get messenger ID")
+		out := errors.Wrap(err, "couldn't get messenger ID")
+		if err == notifier.ErrNotFound {
+			return subscriber.NewNonRetryableError(out)
+		}
+		return out
 	}
 
 	err = s.sendMessage(ctx, messengerID, event.Message)

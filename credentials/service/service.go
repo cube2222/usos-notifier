@@ -211,7 +211,7 @@ func (s *Service) writeAuthorizePage(token, message string, w http.ResponseWrite
 func (s *Service) handleUserCreated(ctx context.Context, message *subscriber.Message) error {
 	text, err := subscriber.DecodeTextMessage(message)
 	if err != nil {
-		return errors.Wrap(err, "couldn't decode text message")
+		return subscriber.NewNonRetryableError(errors.Wrap(err, "couldn't decode text message"))
 	}
 
 	userID := users.NewUserID(string(text))

@@ -3,7 +3,6 @@ package datastore
 import (
 	"context"
 
-	"github.com/cube2222/usos-notifier/common/customerrors"
 	"github.com/cube2222/usos-notifier/common/users"
 	"github.com/cube2222/usos-notifier/notifier"
 
@@ -50,11 +49,11 @@ func (s *userMapping) CreateUser(ctx context.Context, messengerID notifier.Messe
 
 	_, err = tx.Put(key1, &datastoreMessengerID{string(messengerID)})
 	if err != nil {
-		return "", errors.Wrap(err, "couldn't create userid to messenger mapping")
+		return "", errors.Wrap(err, "couldn't create userID to messenger mapping")
 	}
 	_, err = tx.Put(key2, &datastoreUserID{userID.String()})
 	if err != nil {
-		return "", errors.Wrap(err, "couldn't create messenger to userid mapping")
+		return "", errors.Wrap(err, "couldn't create messenger to userID mapping")
 	}
 
 	_, err = tx.Commit()
@@ -72,7 +71,7 @@ func (s *userMapping) GetMessengerID(ctx context.Context, userID users.UserID) (
 	err := s.ds.Get(ctx, key, &out)
 	if err != nil {
 		if err == datastore.ErrNoSuchEntity {
-			return "", customerrors.NewPermanent(err)
+			return "", notifier.ErrNotFound
 		}
 		return "", errors.Wrap(err, "couldn't get messengerID")
 	}
@@ -87,7 +86,7 @@ func (s *userMapping) GetUserID(ctx context.Context, messengerID notifier.Messen
 	err := s.ds.Get(ctx, key, &out)
 	if err != nil {
 		if err == datastore.ErrNoSuchEntity {
-			return "", customerrors.NewPermanent(err)
+			return "", notifier.ErrNotFound
 		}
 		return "", errors.Wrap(err, "couldn't get userID")
 	}

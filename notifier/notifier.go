@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/cube2222/usos-notifier/common/users"
+	"github.com/pkg/errors"
 )
 
 type MessengerID string
@@ -21,3 +22,5 @@ type UserMapping interface {
 	GetMessengerID(ctx context.Context, userID users.UserID) (MessengerID, error)
 	GetUserID(ctx context.Context, messengerID MessengerID) (users.UserID, error)
 }
+
+var ErrNotFound = errors.New("mapping not found")
