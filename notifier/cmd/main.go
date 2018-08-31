@@ -22,7 +22,6 @@ import (
 	"github.com/cube2222/usos-notifier/notifier/service/datastore"
 )
 
-// TODO: Add config.
 func main() {
 	config := &notifier.Config{}
 	envconfig.MustProcess("notifier", config)
