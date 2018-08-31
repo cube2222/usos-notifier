@@ -3,7 +3,6 @@ package parser
 import (
 	"fmt"
 	"io"
-	"log"
 	"regexp"
 	"strconv"
 	"strings"
@@ -18,12 +17,11 @@ import (
 func GetScores(r io.Reader) (map[string]*marks.Score, error) {
 	doc, err := goquery.NewDocumentFromReader(r)
 	if err != nil {
-		log.Fatal(err) //TODO: Get rid of this fatal
+		return nil, errors.Wrap(err, "couldn't parse html")
 	}
 
 	nodes := doc.Find("[id^='childrenof']").Nodes
 	if len(nodes) < 1 {
-		log.Println(len(nodes))
 		return nil, errors.Wrap(err, "couldn't get top-level childrenof*")
 	}
 	node := nodes[0]
