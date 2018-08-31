@@ -14,13 +14,14 @@ import (
 	"golang.org/x/net/html"
 )
 
+// GetScores takes the whole html website with scores, returning the scores.
 func GetScores(r io.Reader) (map[string]*marks.Score, error) {
 	doc, err := goquery.NewDocumentFromReader(r)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) //TODO: Get rid of this fatal
 	}
 
-	nodes := doc.Find(fmt.Sprintf("[id^='childrenof']")).Nodes
+	nodes := doc.Find("[id^='childrenof']").Nodes
 	if len(nodes) < 1 {
 		log.Println(len(nodes))
 		return nil, errors.Wrap(err, "couldn't get top-level childrenof*")
@@ -115,7 +116,7 @@ func extractCategoryName(node *html.Node) (name string, err error) {
 		return "", errors.Errorf("unexpected node count: %v expected: %v", len(doc.Nodes), 1)
 	}
 
-	// we're in the td node, get the firs child, the text
+	// we're in the td node, get the first child, the text
 	name = strings.TrimSpace(doc.Nodes[0].FirstChild.Data)
 
 	return name, nil
@@ -142,7 +143,7 @@ func getSingleScore(node *html.Node) (name string, score *marks.Score, err error
 			children[1].FirstChild.NextSibling.FirstChild.Data,
 		),
 		64,
-	) // Second td, subspan text
+	)                                                     // Second td, subspan text
 	if err != nil {
 		return "", nil, errors.Wrap(err, "invalid max score")
 	}

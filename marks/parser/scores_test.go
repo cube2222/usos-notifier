@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/cube2222/usos-notifier/marks"
-	"golang.org/x/net/html"
 )
 
 func TestGetScores(t *testing.T) {
@@ -22,7 +21,7 @@ func TestGetScores(t *testing.T) {
 		{
 			name: "",
 			args: args{
-				filename: "fixtures/full/test.html",
+				filename: "fixtures/scores/full/full.html",
 			},
 			want: map[string]*marks.Score{
 				"Duże kolokwium/Zadanie 1":                                                {Unknown: false, Hidden: false, Actual: 3, Max: 17.5},
@@ -92,11 +91,10 @@ func Test_getSingleScore(t *testing.T) {
 		wantScore *marks.Score
 		wantErr   bool
 	}{
-		// TODO: Add test cases.
 		{
 			name: "With a correct unknown score, I want a correct actual and max score as well as the name",
 			args: args{
-				filename: "fixtures/single/single.html",
+				filename: "fixtures/scores/single/single.html",
 			},
 			wantName: "zadanie 1",
 			wantScore: &marks.Score{
@@ -108,7 +106,7 @@ func Test_getSingleScore(t *testing.T) {
 		{
 			name: "With a correct unknown score, I want a correct name, max score, and information that it's unknown",
 			args: args{
-				filename: "fixtures/single/unknown.html",
+				filename: "fixtures/scores/single/unknown.html",
 			},
 			wantName: "zadanie 1",
 			wantScore: &marks.Score{
@@ -120,7 +118,7 @@ func Test_getSingleScore(t *testing.T) {
 		{
 			name: "With a correct unknown score and a description present, I want a correct actual and max score as well as the name",
 			args: args{
-				filename: "fixtures/single/with_description.html",
+				filename: "fixtures/scores/single/with_description.html",
 			},
 			wantName: "Liczba nieobecności nieuspr. na ćwiczeniach",
 			wantScore: &marks.Score{
@@ -132,7 +130,7 @@ func Test_getSingleScore(t *testing.T) {
 		{
 			name: "With a hidden score, I want a correct name, max score, and information that it's hidden.",
 			args: args{
-				filename: "fixtures/single/hidden.html",
+				filename: "fixtures/scores/single/hidden.html",
 			},
 			wantName: "Zadanie I.1",
 			wantScore: &marks.Score{
@@ -174,7 +172,7 @@ func Test_extractCategoryName(t *testing.T) {
 		{
 			name: "With a correct category name, I want to get it",
 			args: args{
-				filename: "fixtures/category/category.html",
+				filename: "fixtures/scores/category/category.html",
 			},
 			want:    "małe kolokwium",
 			wantErr: false,
@@ -184,8 +182,7 @@ func Test_extractCategoryName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			node := loadTestNode(t, tt.args.filename)
 
-			// Going around some html.Parse addition (<html><head></head><body><table>...</table></body></html>)
-			got, err := extractCategoryName(node.FirstChild.FirstChild.NextSibling.FirstChild)
+			got, err := extractCategoryName(node)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("extractCategoryName() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -195,19 +192,4 @@ func Test_extractCategoryName(t *testing.T) {
 			}
 		})
 	}
-}
-
-func loadTestNode(t *testing.T, filename string) *html.Node {
-	f, err := os.Open(filename)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-
-	node, err := html.Parse(f)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return node
 }
