@@ -19,18 +19,19 @@ type encrypted struct {
 	UserAndPassword string
 }
 
-var encryptionKey = fmt.Sprintf("projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s",
-	"usos-notifier", "global", "credentials", "credentials")
-
 type credentialsStorage struct {
-	ds  *datastore.Client
-	kms *cloudkms.Service
+	additionalAuthenticatedData []byte
+	encryptionKeyID             string
+	ds                          *datastore.Client
+	kms                         *cloudkms.Service
 }
 
-func NewCredentialsStorage(ds *datastore.Client, kms *cloudkms.Service) credentials.CredentialsStorage {
+func NewCredentialsStorage(ds *datastore.Client, kms *cloudkms.Service, encryptionKeyID, additionalAuthenticatedData string) credentials.CredentialsStorage {
 	return &credentialsStorage{
-		ds:  ds,
-		kms: kms,
+		additionalAuthenticatedData: []byte(additionalAuthenticatedData),
+		encryptionKeyID:             encryptionKeyID,
+		ds:                          ds,
+		kms:                         kms,
 	}
 }
 
@@ -45,12 +46,12 @@ func (cs *credentialsStorage) GetCredentials(ctx context.Context, userID users.U
 	}
 
 	decryptRequest := cloudkms.DecryptRequest{
-		AdditionalAuthenticatedData: base64.StdEncoding.EncodeToString([]byte("something")),
+		AdditionalAuthenticatedData: base64.StdEncoding.EncodeToString(cs.additionalAuthenticatedData),
 		Ciphertext:                  encrypted.UserAndPassword,
 	}
 
 	res, err := cs.kms.Projects.Locations.KeyRings.CryptoKeys.
-		Decrypt(encryptionKey, &decryptRequest).
+		Decrypt(cs.encryptionKeyID, &decryptRequest).
 		Context(ctx).
 		Do()
 	if err != nil {
@@ -116,10 +117,10 @@ func (cs *credentialsStorage) SaveCredentials(ctx context.Context, userID users.
 	credsPhrase := encodeUserAndPassword(user, password)
 
 	encryptRequest := cloudkms.EncryptRequest{
-		AdditionalAuthenticatedData: base64.StdEncoding.EncodeToString([]byte("something")), //TODO: Change
+		AdditionalAuthenticatedData: base64.StdEncoding.EncodeToString(cs.additionalAuthenticatedData), //TODO: Change
 		Plaintext:                   base64.StdEncoding.EncodeToString([]byte(credsPhrase)),
 	}
-	res, err := cs.kms.Projects.Locations.KeyRings.CryptoKeys.Encrypt(encryptionKey, &encryptRequest).Do()
+	res, err := cs.kms.Projects.Locations.KeyRings.CryptoKeys.Encrypt(cs.encryptionKeyID, &encryptRequest).Do()
 	if err != nil {
 		return errors.Wrap(err, "couldn't encrypt credentials")
 	}

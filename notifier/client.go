@@ -20,12 +20,14 @@ type NotificationSender interface {
 }
 
 type notificationSender struct {
-	publisher *publisher.Publisher
+	notificationsTopic string
+	publisher          *publisher.Publisher
 }
 
-func NewNotificationSender(publisher *publisher.Publisher) NotificationSender {
+func NewNotificationSender(publisher *publisher.Publisher, notificationsTopic string) NotificationSender {
 	return &notificationSender{
-		publisher: publisher,
+		notificationsTopic: notificationsTopic,
+		publisher:          publisher,
 	}
 }
 

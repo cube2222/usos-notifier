@@ -53,7 +53,7 @@ func main() {
 				NewSubscriptionClient(pubsubCli).
 				Subscribe(
 					context.Background(),
-					config.NotificationsTopic,
+					config.NotificationsSubscription,
 					subscriber.Chain(
 						s.HandleMessageSendEvent,
 						subscriber.WithLogger(logger.NewStdLogger()),

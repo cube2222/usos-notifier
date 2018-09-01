@@ -37,6 +37,8 @@ spec:
         env:
           - name: GOOGLE_APPLICATION_CREDENTIALS
             value: /var/secrets/google/serviceaccount.json
+          - name: NOTIFIER_GOOGLE_APPLICATION_CREDENTIALS
+            value: /var/secrets/google/serviceaccount.json
           - name: NOTIFIER_MESSENGER_API_KEY
             valueFrom:
               secretKeyRef:

@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"html/template"
 	"log"
 	"net"
 	"net/http"
-	"os"
 
 	gdatastore "cloud.google.com/go/datastore"
 	"cloud.google.com/go/pubsub"
@@ -17,6 +17,7 @@ import (
 	"github.com/cube2222/usos-notifier/notifier"
 	"github.com/go-chi/chi"
 	"github.com/grpc-ecosystem/go-grpc-middleware"
+	"github.com/kelseyhightower/envconfig"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/cloudkms/v1"
 	"google.golang.org/api/option"
@@ -31,6 +32,9 @@ import (
 )
 
 func main() {
+	config := &credentials.Config{}
+	envconfig.MustProcess("credentials", config)
+
 	httpCli, err := google.DefaultClient(context.Background(), cloudkms.CloudPlatformScope)
 	if err != nil {
 		log.Fatal("Couldn't setup google default http client: ", err)
@@ -40,23 +44,24 @@ func main() {
 		log.Fatal("Couldn't create cloud kms client", err)
 
 	}
-	ds, err := gdatastore.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
+	ds, err := gdatastore.NewClient(context.Background(), config.ProjectName, option.WithCredentialsFile(config.GoogleApplicationCredentials))
 	if err != nil {
 		log.Fatal("Couldn't create datastore client", err)
 
 	}
-	pubsubCli, err := pubsub.NewClient(context.Background(), "usos-notifier", option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
+	pubsubCli, err := pubsub.NewClient(context.Background(), config.ProjectName, option.WithCredentialsFile(config.GoogleApplicationCredentials))
 	if err != nil {
 		log.Fatal("Couldn't create datastore client", err)
 
 	}
 
-	credentialsStorage := datastore.NewCredentialsStorage(ds, kms)
+	credentialsStorage := datastore.NewCredentialsStorage(ds, kms, config.EncryptionKeyID, config.AdditionalAuthenticatedData)
 	tokenStorage := datastore.NewTokenStorage(ds)
 	notificationSender := notifier.NewNotificationSender(
 		publisher.
 			NewPublisher(pubsubCli).
 			Use(publisher.WithRequestID),
+		config.NotificationsTopic,
 	)
 
 	data, err := resources.Asset("authorize.html")
@@ -84,7 +89,7 @@ func main() {
 		),
 	)
 	credentials.RegisterCredentialsServer(server, s)
-	lis, err := net.Listen("tcp", ":8081")
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", config.ListenPortGrpc))
 	go func() {
 		log.Fatal(server.Serve(lis))
 	}()
@@ -98,7 +103,7 @@ func main() {
 	m.HandleFunc("/credentials/authorize", s.HandleAuthorizeHTTP)
 	go func() {
 		log.Println("Serving...")
-		log.Fatal(http.ListenAndServe(":8080", m))
+		log.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", config.ListenPortHttp), m))
 	}()
 
 	// Set up user created event subscription
@@ -108,7 +113,7 @@ func main() {
 				NewSubscriptionClient(pubsubCli).
 				Subscribe(
 					context.Background(),
-					"credentials-notifier-user_created",
+					config.UserCreatedSubscription,
 					subscriber.Chain(
 						s.HandleUserCreatedEvent,
 						subscriber.WithLogger(logger.NewStdLogger()),
