@@ -76,9 +76,13 @@ You need to have Datastore activated. The microservices will create necessary ki
     * ```kubectl create secret generic credentials-service-account  --from-file=serviceaccount.json=credentials.json```
 * Notifier service account. Download the json file and call it notifier.json.
     * ```kubectl create secret generic notifier-service-account  --from-file=serviceaccount.json=notifier.json```
-* Messenger API key. Put the key into your local MESSENGER_API environment variable.
-    * On Windows: ```kubectl create secret generic messenger-api --from-literal=messenger-api=$ENV:MESSENGER_API```
-    * On Linux: ```kubectl create secret generic messenger-api --from-literal=messenger-api=$MESSENGER_API```    
+* Messenger API key. Put the key into your local NOTIFIER_MESSENGER_API_KEY environment variable.
+    * On Windows: ```kubectl create secret generic messenger-api --from-literal=messenger-api=$ENV:NOTIFIER_MESSENGER_API_KEY```
+    * On Linux: ```kubectl create secret generic messenger-api --from-literal=messenger-api=NOTIFIER_MESSENGER_API_KEY```
+* Messenger Verify key. Put the key into your local NOTIFIER_MESSENGER_VERIFY_TOKEN environment variable.
+    * On Windows: ```kubectl create secret generic messenger-api --from-literal=messenger-api=$ENV:NOTIFIER_MESSENGER_VERIFY_TOKEN```
+    * On Linux: ```kubectl create secret generic messenger-api --from-literal=messenger-api=NOTIFIER_MESSENGER_VERIFY_TOKEN```
+
 
 #### Infrastructure:
 * Nginx controller. This will create a daemon set of nginx instances. All of them will have hostPort 80 and 443, so just route your DNS to one of your nodes.

@@ -1,16 +1,16 @@
-// TODO: Create sub-packages for the mapping and messaging
-
 package service
 
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha1"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
 	"time"
 
 	"github.com/pkg/errors"
@@ -23,18 +23,30 @@ import (
 )
 
 type Service struct {
-	userMapping          notifier.UserMapping
-	publisher            *publisher.Publisher
 	cli                  *http.Client
+	commandsTopic        string
+	developmentMode      bool
+	fbDomain             string
 	messengerRateLimiter *MessengerRateLimiter
+	messengerVerifyToken string
+	messengerAPIKey      string
+	publisher            *publisher.Publisher
+	userCreatedTopic     string
+	userMapping          notifier.UserMapping
 }
 
-func NewService(mapping notifier.UserMapping, publisher *publisher.Publisher, limiter *MessengerRateLimiter) (*Service, error) {
+func NewService(mapping notifier.UserMapping, publisher *publisher.Publisher, limiter *MessengerRateLimiter, config *notifier.Config) (*Service, error) {
 	service := &Service{
-		userMapping:          mapping,
-		publisher:            publisher,
 		cli:                  http.DefaultClient,
+		commandsTopic:        config.CommandsTopic,
+		developmentMode:      config.DevelopmentMode,
+		fbDomain:             config.FacebookDomain,
 		messengerRateLimiter: limiter,
+		messengerAPIKey:      config.MessengerApiKey,
+		messengerVerifyToken: config.MessengerVerifyToken,
+		publisher:            publisher,
+		userCreatedTopic:     config.UserCreatedTopic,
+		userMapping:          mapping,
 	}
 
 	return service, nil
@@ -69,20 +81,28 @@ type MessageEvent struct {
 func (s *Service) HandleMessageReceivedWebhookHTTP(w http.ResponseWriter, r *http.Request) {
 	log := logger.FromContext(r.Context())
 
-	//TODO Change verify token to secret-based
-	if r.URL.Query().Get("hub.mode") == "subscribe" && r.URL.Query().Get("hub.verify_token") == "aowicb038qfi87uvabo8li7b32pv84743qv2" {
-		log.Printf("Handling challange.")
+	if r.URL.Query().Get("hub.mode") == "subscribe" && r.URL.Query().Get("hub.verify_token") == s.messengerVerifyToken {
 		fmt.Fprint(w, r.URL.Query().Get("hub.challenge"))
 		return
 	}
 
-	webhook := Webhook{}
+	signature := hmac.New(sha1.New, []byte(s.messengerVerifyToken))
+	body := io.TeeReader(r.Body, signature)
 
-	err := json.NewDecoder(r.Body).Decode(&webhook)
+	webhook := Webhook{}
+	err := json.NewDecoder(body).Decode(&webhook)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprint(w, err)
 		return
+	}
+
+	if !s.developmentMode {
+		if len(r.Header.Get("X-Hub-Signature")) < 5 || fmt.Sprintf("%x", signature.Sum(nil)) != r.Header.Get("X-Hub-Signature")[5:] {
+			w.WriteHeader(http.StatusUnauthorized)
+			log.Println("Invalid message signature.")
+			return
+		}
 	}
 
 	for _, page := range webhook.Entry {
@@ -109,7 +129,7 @@ func (s *Service) handleMessageReceived(ctx context.Context, webhook MessageEven
 				log.Printf("Couldn't send rate limit notification: %v", err)
 			}
 		case ReasonGeneral:
-			err := s.sendMessage(ctx, webhook.Sender.ID, fmt.Sprintf("Jestem akurat przytłoczony ilością wiadomości od użytkowników. Spróbuj ponownie za %d minut.", int(rateLimit.TimeLeft.Round(time.Minute).Minutes())))
+			err := s.sendMessage(ctx, webhook.Sender.ID, fmt.Sprintf("Jestem w tym momencie przytłoczony ilością wiadomości od użytkowników. Spróbuj ponownie za %d minut.", int(rateLimit.TimeLeft.Round(time.Minute).Minutes())))
 			if err != nil {
 				log.Printf("Couldn't send rate limit notification: %v", err)
 			}
@@ -140,7 +160,7 @@ func (s *Service) handleMessageReceived(ctx context.Context, webhook MessageEven
 			return errors.Wrap(err, "couldn't create user")
 		}
 
-		err = s.publisher.PublishEvent(ctx, "notifier-user_created",
+		err = s.publisher.PublishEvent(ctx, s.userCreatedTopic,
 			map[string]string{
 				"origin": "fb_messenger",
 			},
@@ -152,7 +172,7 @@ func (s *Service) handleMessageReceived(ctx context.Context, webhook MessageEven
 
 	}
 
-	err = s.publisher.PublishEvent(ctx, "notifier-commands",
+	err = s.publisher.PublishEvent(ctx, s.commandsTopic,
 		map[string]string{
 			"user_id": userID.String(),
 			"origin":  "fb_messenger",
@@ -205,13 +225,13 @@ func (s *Service) sendMessage(ctx context.Context, messengerID notifier.Messenge
 	message.Recipient.ID = messengerID
 	message.Message.Text = body
 
-	fbURL, err := url.Parse("https://graph.facebook.com/v2.6/me/messages")
+	fbURL, err := url.Parse(fmt.Sprintf("https://%s/v2.6/me/messages", s.fbDomain))
 	if err != nil {
 		return errors.Wrap(err, "couldn't parse fb url")
 	}
 
 	query := fbURL.Query()
-	query.Set("access_token", os.Getenv("MESSENGER_API"))
+	query.Set("access_token", s.messengerAPIKey)
 	fbURL.RawQuery = query.Encode()
 
 	data, err := json.Marshal(message)

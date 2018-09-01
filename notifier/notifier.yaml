@@ -37,7 +37,12 @@ spec:
         env:
           - name: GOOGLE_APPLICATION_CREDENTIALS
             value: /var/secrets/google/serviceaccount.json
-          - name: MESSENGER_API
+          - name: NOTIFIER_MESSENGER_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: messenger-api
+                key: messenger-api
+          - name: NOTIFIER_MESSENGER_VERIFY_TOKEN
             valueFrom:
               secretKeyRef:
                 name: messenger-api
