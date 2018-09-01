@@ -8,7 +8,7 @@ type Config struct {
 
 	ProjectName                  string `default:"usos-notifier" split_words:"true"`
 	CommandsTopic                string `default:"notifier-commands" split_words:"true"`
-	NotificationsTopic           string `default:"notifier-notifications" split_words:"true"`
+	NotificationsSubscription    string `default:"notifier-notifications" split_words:"true"`
 	UserCreatedTopic             string `default:"notifier-user_created" split_words:"true"`
 	GoogleApplicationCredentials string `default:"/var/secrets/google/serviceaccount.json" split_words:"true"`
 
