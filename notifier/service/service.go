@@ -31,6 +31,7 @@ type Service struct {
 	messengerVerifyToken string
 	messengerAPIKey      string
 	publisher            *publisher.Publisher
+	userCreatedTopic     string
 	userMapping          notifier.UserMapping
 }
 
@@ -42,8 +43,9 @@ func NewService(mapping notifier.UserMapping, publisher *publisher.Publisher, li
 		fbDomain:             config.FacebookDomain,
 		messengerRateLimiter: limiter,
 		messengerAPIKey:      config.MessengerApiKey,
-		messengerVerifyToken: config.MessengerVerifyKey,
+		messengerVerifyToken: config.MessengerVerifyToken,
 		publisher:            publisher,
+		userCreatedTopic:     config.UserCreatedTopic,
 		userMapping:          mapping,
 	}
 
@@ -158,7 +160,7 @@ func (s *Service) handleMessageReceived(ctx context.Context, webhook MessageEven
 			return errors.Wrap(err, "couldn't create user")
 		}
 
-		err = s.publisher.PublishEvent(ctx, "notifier-user_created",
+		err = s.publisher.PublishEvent(ctx, s.userCreatedTopic,
 			map[string]string{
 				"origin": "fb_messenger",
 			},

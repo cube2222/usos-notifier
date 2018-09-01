@@ -1,15 +1,18 @@
 package notifier
 
 type Config struct {
-	CommandsTopic                string `default:"notifier-commands"`
-	DevelopmentMode              bool   `default:"false"`
-	FacebookDomain               string `default:"graph.facebook.com"`
-	GeneralPerHourRateLimit      int    `default:"1000"`
-	GoogleApplicationCredentials string `default:"/var/secrets/google/serviceaccount.json"`
-	ListenPortHttp               int    `default:"8080"`
-	MessengerApiKey              string `required:"true"`
-	MessengerVerifyKey           string `required:"true"`
-	NotificationsTopic           string `default:"notifier-notifications"`
-	ProjectName                  string `default:"usos-notifier"`
-	UserPerHourRateLimit         int    `default:"100"`
+	DevelopmentMode         bool `default:"false" split_words:"true"`
+	ListenPortHttp          int  `default:"8080" split_words:"true"`
+	GeneralPerHourRateLimit int  `default:"1000" split_words:"true"`
+	UserPerHourRateLimit    int  `default:"100" split_words:"true"`
+
+	ProjectName                  string `default:"usos-notifier" split_words:"true"`
+	CommandsTopic                string `default:"notifier-commands" split_words:"true"`
+	NotificationsTopic           string `default:"notifier-notifications" split_words:"true"`
+	UserCreatedTopic             string `default:"notifier-user_created" split_words:"true"`
+	GoogleApplicationCredentials string `default:"/var/secrets/google/serviceaccount.json" split_words:"true"`
+
+	FacebookDomain       string `default:"graph.facebook.com" split_words:"true"`
+	MessengerApiKey      string `required:"true" split_words:"true"`
+	MessengerVerifyToken string `required:"true" split_words:"true"`
 }
