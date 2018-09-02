@@ -160,6 +160,14 @@ func (s *Service) HandleUserCreatedEvent(ctx context.Context, message *subscribe
 		return errors.Wrap(err, "couldn't generate authorization token")
 	}
 
+	// TODO: Add the user id to the token, this way even in the case of duplicate tokens everything will work securely.
+	// As the token is a random number up to 10^15 the probability of a repetition with x users is
+	// 1 - ( (10^15 - 1)/10^15 * (10^15 - 2)/10^15 ... * (10^15 - x)/10^15 ) < 1 - ( (10^15 - x)/10^15 )^x
+	// Which for a million users is less than 10^-3
+	// The planned user count is < 100
+	// Which is to say, this is if all of them signed up at the same time,
+	// as tokens get invalidated after the user provides the credentials.
+	// This is a low hanging fruit, but it's also totally unimportant.
 	err = s.sender.SendNotification(ctx, userID,
 		fmt.Sprintf("Proszę autoryzuj mnie do używania Twoich danych logowania: https://notifier.jacobmartins.com/credentials/authorization?token=%v", token))
 	if err != nil {

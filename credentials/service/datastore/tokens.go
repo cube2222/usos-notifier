@@ -30,7 +30,6 @@ type datastoreUserID struct {
 }
 
 func (t *Tokens) GenerateAuthorizationToken(ctx context.Context, userID users.UserID) (string, error) {
-	// TODO: Maybe add TTL, isn't that sensitive though.
 	n, err := rand.Int(rand.Reader, big.NewInt(1000000000000000))
 	if err != nil {
 		return "", errors.Wrap(err, "couldn't generate random token")

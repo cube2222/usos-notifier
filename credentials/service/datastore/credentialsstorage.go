@@ -117,7 +117,7 @@ func (cs *credentialsStorage) SaveCredentials(ctx context.Context, userID users.
 	credsPhrase := encodeUserAndPassword(user, password)
 
 	encryptRequest := cloudkms.EncryptRequest{
-		AdditionalAuthenticatedData: base64.StdEncoding.EncodeToString(cs.additionalAuthenticatedData), //TODO: Change
+		AdditionalAuthenticatedData: base64.StdEncoding.EncodeToString(cs.additionalAuthenticatedData),
 		Plaintext:                   base64.StdEncoding.EncodeToString([]byte(credsPhrase)),
 	}
 	res, err := cs.kms.Projects.Locations.KeyRings.CryptoKeys.Encrypt(cs.encryptionKeyID, &encryptRequest).Do()
