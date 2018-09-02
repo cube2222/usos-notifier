@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -16,25 +15,15 @@ import (
 
 var ErrAlreadySavedMsg = "Already saved."
 
-// Todo: Remove all those log.Fatals
+var ltRegexp = regexp.MustCompile("LT-[a-zA-Z0-9]+-[a-zA-Z0-9]+")
+
 func login(ctx context.Context, user, password string) (string, error) {
-	uri, err := url.Parse("https://logowanie.uw.edu.pl/cas/login")
-	if err != nil {
-		return "", errors.Wrap(err, "couldn't parse request url")
-	}
-
-	q := uri.Query()
-	q.Add("service", "https://usosweb.mimuw.edu.pl/kontroler.php?_action=logowaniecas/index")
-	q.Add("locale", "pl")
-	uri.RawQuery = q.Encode()
-
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		return "", errors.Wrap(err, "couldn't create empty cookiejar")
 	}
 
 	redir := ""
-
 	// Better create a new http client each time.
 	// We explicitly don't want to share any state.
 	cli := http.Client{
@@ -53,30 +42,37 @@ func login(ctx context.Context, user, password string) (string, error) {
 		},
 	}
 
+	uri, err := url.Parse("https://logowanie.uw.edu.pl/cas/login")
+	if err != nil {
+		return "", errors.Wrap(err, "couldn't parse request url")
+	}
+
+	q := uri.Query()
+	q.Add("service", "https://usosweb.mimuw.edu.pl/kontroler.php?_action=logowaniecas/index")
+	q.Add("locale", "pl")
+	uri.RawQuery = q.Encode()
+
 	req, err := http.NewRequest(http.MethodGet, uri.String(), nil)
 	if err != nil {
-		log.Fatal(err)
+		return "", errors.Wrap(err, "couldn't create login page get request")
 	}
 
 	req = req.WithContext(ctx)
 
 	resp, err := cli.Do(req)
 	if err != nil {
-		log.Fatal(err)
+		return "", errors.Wrap(err, "couldn't get login page")
 	}
 
 	data, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal(err)
+		return "", errors.Wrap(err, "couldn't read login page body")
 	}
 
-	LTReg, err := regexp.Compile("LT-[a-zA-Z0-9]+-[a-zA-Z0-9]+")
-	if err != nil {
-		log.Fatal(err)
+	LT := ltRegexp.Find(data)
+	if len(LT) == 0 {
+		return "", errors.Wrap(err, "couldn't retrieve login token from the login page body")
 	}
-
-	// TODO: Handle inexistance of LT
-	LT := LTReg.Find(data)
 
 	form := url.Values{}
 	form.Add("username", user)
@@ -88,18 +84,20 @@ func login(ctx context.Context, user, password string) (string, error) {
 
 	// TODO: Identify myself using the UserAgent
 	resp, err = cli.PostForm(uri.String(), form)
+	// USOS throws us into an infinite redirection loop. So we're breaking
+	// after the first redirect which provided us with the USOS session token.
 	if err != nil && !strings.Contains(err.Error(), ErrAlreadySavedMsg) {
-		return "", errors.Wrap(err, "couldn't post login form")
+		return "", errors.Wrap(err, "couldn't login")
 	}
 
 	parsed, err := url.Parse("https://usosweb.mimuw.edu.pl")
 	if err != nil {
-		return "", errors.Wrap(err, "couldn't parse url for cookie extraction")
+		return "", errors.Wrap(err, "couldn't parse url for usos session cookie extraction")
 	}
 	for _, cookie := range cli.Jar.Cookies(parsed) {
 		if cookie.Name == "PHPSESSID" {
 			return cookie.Value, nil
 		}
 	}
-	return "", errors.New("PHPSESSID cookie not found")
+	return "", errors.New("usos session cookie not found")
 }
