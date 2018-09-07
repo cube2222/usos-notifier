@@ -51,7 +51,7 @@ func main() {
 	}
 	pubsubCli, err := pubsub.NewClient(context.Background(), config.ProjectName, option.WithCredentialsFile(config.GoogleApplicationCredentials))
 	if err != nil {
-		log.Fatal("Couldn't create datastore client", err)
+		log.Fatal("Couldn't create pubsub client", err)
 
 	}
 
