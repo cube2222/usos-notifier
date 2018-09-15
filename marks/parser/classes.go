@@ -6,37 +6,40 @@ import (
 	"regexp"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/cube2222/usos-notifier/marks"
 	"github.com/pkg/errors"
 	"golang.org/x/net/html"
 )
 
+type Class struct {
+	Name string
+}
+
 var idRegexp = regexp.MustCompile("[0-9]+")
 
-func GetCategories(r io.Reader) (map[string]*marks.Category, error) {
+func GetClasses(r io.Reader) (map[string]*Class, error) {
 	doc, err := goquery.NewDocumentFromReader(r)
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't parse html")
 	}
 	selection := doc.Find("[href^=\"https://usosweb.mimuw.edu.pl/kontroler.php?_action=dla_stud/studia/sprawdziany/pokaz\"]")
 
-	categories := map[string]*marks.Category{}
+	classes := map[string]*Class{}
 	for _, node := range selection.Nodes {
-		id, category, err := getCategory(node)
+		id, class, err := getClass(node)
 		if err != nil {
-			return nil, errors.Wrap(err, "couldn't parse category")
+			return nil, errors.Wrap(err, "couldn't parse class")
 		}
-		categories[id] = category
+		classes[id] = class
 	}
-	log.Printf("%+v", categories)
+	log.Printf("%+v", classes)
 
-	return categories, nil
+	return classes, nil
 }
 
-func getCategory(node *html.Node) (id string, category *marks.Category, err error) {
+func getClass(node *html.Node) (id string, class *Class, err error) {
 	defer func() {
 		if recErr := recover(); recErr != nil {
-			err = errors.Errorf("invalid category structure: %v", recErr)
+			err = errors.Errorf("invalid class structure: %v", recErr)
 		}
 	}()
 
@@ -45,7 +48,7 @@ func getCategory(node *html.Node) (id string, category *marks.Category, err erro
 		return "", nil, errors.New("invalid ID")
 	}
 
-	return id, &marks.Category{
+	return id, &Class{
 		Name: node.FirstChild.Data,
 	}, nil
 }

@@ -8,13 +8,18 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/cube2222/usos-notifier/marks"
 	"github.com/pkg/errors"
 	"golang.org/x/net/html"
 )
 
+type Score struct {
+	Unknown     bool
+	Hidden      bool
+	Actual, Max float64
+}
+
 // GetScores takes the whole html website with scores, returning the scores.
-func GetScores(r io.Reader) (map[string]*marks.Score, error) {
+func GetScores(r io.Reader) (map[string]*Score, error) {
 	doc, err := goquery.NewDocumentFromReader(r)
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't parse html")
@@ -26,7 +31,7 @@ func GetScores(r io.Reader) (map[string]*marks.Score, error) {
 	}
 	node := nodes[0]
 
-	scores := make(map[string]*marks.Score)
+	scores := make(map[string]*Score)
 	err = getScores(scores, "", node)
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't get scores")
@@ -35,7 +40,7 @@ func GetScores(r io.Reader) (map[string]*marks.Score, error) {
 	return scores, nil
 }
 
-func getScores(scores map[string]*marks.Score, prefix string, node *html.Node) error {
+func getScores(scores map[string]*Score, prefix string, node *html.Node) error {
 	foundSubTrees := false
 
 	children := getElementNodeChildren(node)
@@ -122,7 +127,7 @@ func extractCategoryName(node *html.Node) (name string, err error) {
 
 var maxRegexp = regexp.MustCompile("[0-9]+(\\.[0-9]+)?")
 
-func getSingleScore(node *html.Node) (name string, score *marks.Score, err error) {
+func getSingleScore(node *html.Node) (name string, score *Score, err error) {
 	defer func() {
 		if recErr := recover(); recErr != nil {
 			err = errors.Errorf("invalid score structure: %v", recErr)
@@ -141,20 +146,20 @@ func getSingleScore(node *html.Node) (name string, score *marks.Score, err error
 			children[1].FirstChild.NextSibling.FirstChild.Data,
 		),
 		64,
-	)                                                     // Second td, subspan text
+	) // Second td, subspan text
 	if err != nil {
 		return "", nil, errors.Wrap(err, "invalid max score")
 	}
 
 	scoreString := children[2].FirstChild.NextSibling.FirstChild.Data
 	if scoreString == "brak wyniku" {
-		return name, &marks.Score{
+		return name, &Score{
 			Unknown: true,
 			Max:     max,
 		}, nil
 	}
 	if scoreString == "wynik jest ukryty" {
-		return name, &marks.Score{
+		return name, &Score{
 			Hidden: true,
 			Max:    max,
 		}, nil
@@ -168,7 +173,7 @@ func getSingleScore(node *html.Node) (name string, score *marks.Score, err error
 		return "", nil, errors.Wrap(err, "invalid actual score")
 	}
 
-	return name, &marks.Score{
+	return name, &Score{
 		Actual: actual,
 		Max:    max,
 	}, nil
