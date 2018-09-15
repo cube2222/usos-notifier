@@ -14,8 +14,6 @@ import (
 )
 
 type CommandsHandler interface {
-	// TODO: Add the requestID to the errorResponse.
-	// Pattern is a regexp with capture groups
 	Handle(matcher Matcher, handler func(ctx context.Context, userID users.UserID, params map[string]string) (string, error))
 	HandleMessage(context.Context, *subscriber.Message) error
 }
@@ -80,15 +78,15 @@ func (ch *commandsHandler) HandleMessage(ctx context.Context, msg *subscriber.Me
 	res, err := handler(ctx, users.NewUserID(msg.Attributes["user_id"]), params)
 	if err != nil {
 		// TODO: Could add a few retries, and only notify about failure the last time
-		err := ch.publisher.PublishEvent(ctx, ch.notificationsTopic, msg.Attributes,
+		publishErr := ch.publisher.PublishEvent(ctx, ch.notificationsTopic, msg.Attributes,
 			fmt.Sprintf(
 				// TODO: Add command zgłoś request-id, so that the user can notify us about bugs using messenger.
 				"Przy obsłudze Twojej wiadomości coś poszło nie tak. Spróbuj jeszcze raz, albo skontaktuj się z nami, podając nam identyfikator wiadomości: %v",
 				ctx.Value(requestid.Key),
 			),
 		)
-		if err != nil {
-			return subscriber.NewNonRetryableError(errors.Wrap(err, "error sending error notification"))
+		if publishErr != nil {
+			return subscriber.NewNonRetryableError(errors.Wrap(publishErr, "error sending error notification"))
 		}
 		return subscriber.NewNonRetryableError(errors.Wrap(err, "error handling user message"))
 	}

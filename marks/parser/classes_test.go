@@ -8,22 +8,22 @@ import (
 	"github.com/cube2222/usos-notifier/marks"
 )
 
-func TestGetCategories(t *testing.T) {
+func TestGetClasses(t *testing.T) {
 	type args struct {
 		filename string
 	}
 	tests := []struct {
 		name    string
 		args    args
-		want    map[string]*marks.Category
+		want    map[string]*marks.Class
 		wantErr bool
 	}{
 		{
 			name: "",
 			args: args{
-				filename: "fixtures/categories/categories.html",
+				filename: "fixtures/classes/classes.html",
 			},
-			want: map[string]*marks.Category{
+			want: map[string]*marks.Class{
 				"107749": {Name: "Analiza matematyczna inf. I"},
 				"109476": {Name: "Geometria z algebrą liniową"},
 				"109311": {Name: "Geometria z algebrą liniową"},
@@ -45,13 +45,13 @@ func TestGetCategories(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			got, err := GetCategories(f)
+			got, err := GetClasses(f)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("GetCategories() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("GetClasses() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("GetCategories() = %v, want %v", got, tt.want)
+				t.Errorf("GetClasses() = %v, want %v", got, tt.want)
 			}
 		})
 	}
