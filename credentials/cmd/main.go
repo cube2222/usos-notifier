@@ -57,10 +57,11 @@ func main() {
 
 	credentialsStorage := datastore.NewCredentialsStorage(ds, kms, config.EncryptionKeyID, config.AdditionalAuthenticatedData)
 	tokenStorage := datastore.NewTokenStorage(ds)
+	pub := publisher.
+		NewPublisher(pubsubCli).
+		Use(publisher.WithRequestID)
 	notificationSender := notifier.NewNotificationSender(
-		publisher.
-			NewPublisher(pubsubCli).
-			Use(publisher.WithRequestID),
+		pub,
 		config.NotificationsTopic,
 	)
 
@@ -73,7 +74,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	s, err := service.NewService(credentialsStorage, tokenStorage, notificationSender, tmpl)
+	s, err := service.NewService(credentialsStorage, tokenStorage, notificationSender, pub, tmpl, config.CredentialsReceivedTopic)
 	if err != nil {
 		log.Fatal(err, "Couldn't create service")
 	}

@@ -7,6 +7,8 @@ I'm using my account name (jakub.wit.martin@gmail.com), use yours if running on 
 ## Service Accounts
 * credentials
     * Datastore User
+* marks
+    * Datastore User
 * notifier
     * Datastore User
     
@@ -32,13 +34,19 @@ In this document. Whenever a resource is described to be created, it may be foll
 #### Resources:
 
 1. Create topics:
+    * credentials-credentials_received
     * notifications
+        * marks: Pub/Sub Publisher
         * credentials: Pub/Sub Publisher
     * notifier-commands
         * notifier: Pub/Sub Publisher
     * notifier-user_created	
         * notifier: Pub/Sub Publisher
 2. Create subscriptions:
+    * marks-credentials-credentials_received
+        * marks: Pub/Sub Subscriber, Pub/Sub Viewer
+    * marks-notifier-commands
+        * marks: Pub/Sub Subscriber, Pub/Sub Viewer
     * notifier-notifications
         * notifier: Pub/Sub Subscriber, Pub/Sub Viewer
     * credentials-notifier-user_created

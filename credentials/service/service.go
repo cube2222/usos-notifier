@@ -7,6 +7,7 @@ import (
 	"regexp"
 
 	"github.com/cube2222/grpc-utils/logger"
+	"github.com/cube2222/usos-notifier/common/events/publisher"
 	"github.com/cube2222/usos-notifier/common/events/subscriber"
 	"github.com/cube2222/usos-notifier/common/users"
 	"github.com/cube2222/usos-notifier/credentials"
@@ -17,23 +18,28 @@ import (
 )
 
 type Service struct {
-	creds  credentials.CredentialsStorage
-	tokens credentials.TokenStorage
-	sender notifier.NotificationSender
+	creds     credentials.CredentialsStorage
+	publisher *publisher.Publisher
+	tokens    credentials.TokenStorage
+	sender    notifier.NotificationSender
 
 	tmpl        *template.Template
 	tokenRegexp *regexp.Regexp
+
+	credentialsReceivedTopic string
 }
 
-func NewService(credentialsStorage credentials.CredentialsStorage, tokenStorage credentials.TokenStorage, notificationSender notifier.NotificationSender, authorizationTemplate *template.Template) (*Service, error) {
+func NewService(credentialsStorage credentials.CredentialsStorage, tokenStorage credentials.TokenStorage, notificationSender notifier.NotificationSender, publisher *publisher.Publisher, authorizationTemplate *template.Template, credentialsReceivedTopic string) (*Service, error) {
 	tokenRegexp := regexp.MustCompile("^[0-9]+$")
 
 	service := &Service{
-		creds:       credentialsStorage,
-		tokens:      tokenStorage,
-		sender:      notificationSender,
-		tmpl:        authorizationTemplate,
-		tokenRegexp: tokenRegexp,
+		creds:                    credentialsStorage,
+		publisher:                publisher,
+		tokens:                   tokenStorage,
+		sender:                   notificationSender,
+		tmpl:                     authorizationTemplate,
+		tokenRegexp:              tokenRegexp,
+		credentialsReceivedTopic: credentialsReceivedTopic,
 	}
 
 	return service, nil
@@ -102,6 +108,13 @@ func (s *Service) HandleAuthorizeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = s.creds.SaveCredentials(r.Context(), userID, username, password)
+	if err != nil {
+		s.writeAuthorizePage(token, "Internal error.", w, r)
+		log.Println(err)
+		return
+	}
+
+	err = s.publisher.PublishEvent(r.Context(), s.credentialsReceivedTopic, nil, userID.String())
 	if err != nil {
 		s.writeAuthorizePage(token, "Internal error.", w, r)
 		log.Println(err)
