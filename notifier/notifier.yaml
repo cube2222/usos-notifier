@@ -24,7 +24,7 @@ spec:
           secretName: notifier-service-account
       containers:
       - name: notifier
-        image: cube2222/notifier:0.0.9
+        image: cube2222/notifier:0.0.10
         ports:
         - containerPort: 8080
         - containerPort: 6666
@@ -47,8 +47,10 @@ spec:
           - name: NOTIFIER_MESSENGER_VERIFY_TOKEN
             valueFrom:
               secretKeyRef:
-                name: messenger-api
-                key: messenger-api
+                name: messenger-verify
+                key: messenger-verify
+          - name: NOTIFIER_DEVELOPMENT_MODE
+            value: "true"
 ---
 apiVersion: v1
 kind: Service

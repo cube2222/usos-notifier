@@ -141,18 +141,27 @@ func getSingleScore(node *html.Node) (name string, score *Score, err error) {
 	children := getElementNodeChildren(nodes[0])
 
 	name = strings.TrimSpace(children[1].FirstChild.Data) // Second td, the text
-	max, err := strconv.ParseFloat(
-		maxRegexp.FindString(
-			children[1].FirstChild.NextSibling.FirstChild.Data,
-		),
-		64,
-	) // Second td, subspan text
-	if err != nil {
-		return "", nil, errors.Wrap(err, "invalid max score")
+
+	maxText := maxRegexp.FindString(
+		children[1].FirstChild.NextSibling.FirstChild.Data,
+	)
+	var max float64
+	if maxText == "" {
+		max = -1 // This is a grade TODO: Add a test for this.
+	} else {
+		max, err = strconv.ParseFloat(
+			maxRegexp.FindString(
+				children[1].FirstChild.NextSibling.FirstChild.Data,
+			),
+			64,
+		) // Second td, subspan text
+		if err != nil {
+			return "", nil, errors.Wrap(err, "invalid max score")
+		}
 	}
 
 	scoreString := children[2].FirstChild.NextSibling.FirstChild.Data
-	if scoreString == "brak wyniku" {
+	if scoreString == "brak wyniku" || scoreString == "brak oceny" {
 		return name, &Score{
 			Unknown: true,
 			Max:     max,
@@ -165,6 +174,7 @@ func getSingleScore(node *html.Node) (name string, score *Score, err error) {
 		}, nil
 	}
 
+	scoreString = strings.Replace(scoreString, ",", ".", 1) // Grades use other punctuation
 	actual, err := strconv.ParseFloat(
 		scoreString,
 		64,

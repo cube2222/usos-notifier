@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: marks
+  labels:
+    service: marks
+spec:
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  replicas: 1
+  selector:
+    matchLabels:
+      service: marks
+  template:
+    metadata:
+      labels:
+        service: marks
+    spec:
+      volumes:
+      - name: service-account-file
+        secret:
+          secretName: marks-service-account
+      containers:
+      - name: marks
+        image: cube2222/marks:0.0.3
+        ports:
+        - containerPort: 8080
+        - containerPort: 8081
+        - containerPort: 6666
+        resources:
+          requests:
+            cpu: 25m
+        volumeMounts:
+        - name: service-account-file
+          mountPath: /var/secrets/google
+        env:
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: /var/secrets/google/serviceaccount.json
+        - name: CREDENTIALS_GOOGLE_APPLICATION_CREDENTIALS
+          value: /var/secrets/google/serviceaccount.json
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: marks
+  labels:
+    service: marks
+spec:
+  selector:
+    service: marks
+  ports:
+  - protocol: TCP
+    port: 8080
+    name: http
+  - protocol: TCP
+    port: 8081
+    name: grpc

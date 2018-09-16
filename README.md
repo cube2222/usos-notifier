@@ -35,6 +35,7 @@ In this document. Whenever a resource is described to be created, it may be foll
 
 1. Create topics:
     * credentials-credentials_received
+        * credentials: Pub/Sub Publisher
     * notifications
         * marks: Pub/Sub Publisher
         * credentials: Pub/Sub Publisher
@@ -81,15 +82,17 @@ You need to have Datastore activated. The microservices will create necessary ki
 * TLS certs for the nginx controller. Standard PEM. I'm using cloudflare generated ones.
     * ```kubectl create secret tls tls-secret --key cert.key --cert cert.crt```
 * Credentials service account. Download the json file and call it credentials.json.
-    * ```kubectl create secret generic credentials-service-account  --from-file=serviceaccount.json=credentials.json```
+    * ```kubectl create secret generic credentials-service-account --from-file=serviceaccount.json=credentials.json```
+* Marks service account. Download the json file and call it marks.json.
+    * ```kubectl create secret generic marks-service-account --from-file=serviceaccount.json=marks.json```
 * Notifier service account. Download the json file and call it notifier.json.
-    * ```kubectl create secret generic notifier-service-account  --from-file=serviceaccount.json=notifier.json```
+    * ```kubectl create secret generic notifier-service-account --from-file=serviceaccount.json=notifier.json```
 * Messenger API key. Put the key into your local NOTIFIER_MESSENGER_API_KEY environment variable.
     * On Windows: ```kubectl create secret generic messenger-api --from-literal=messenger-api=$ENV:NOTIFIER_MESSENGER_API_KEY```
     * On Linux: ```kubectl create secret generic messenger-api --from-literal=messenger-api=NOTIFIER_MESSENGER_API_KEY```
 * Messenger Verify key. Put the key into your local NOTIFIER_MESSENGER_VERIFY_TOKEN environment variable.
-    * On Windows: ```kubectl create secret generic messenger-api --from-literal=messenger-api=$ENV:NOTIFIER_MESSENGER_VERIFY_TOKEN```
-    * On Linux: ```kubectl create secret generic messenger-api --from-literal=messenger-api=NOTIFIER_MESSENGER_VERIFY_TOKEN```
+    * On Windows: ```kubectl create secret generic messenger-verify --from-literal=messenger-verify=$ENV:NOTIFIER_MESSENGER_VERIFY_TOKEN```
+    * On Linux: ```kubectl create secret generic messenger-verify --from-literal=messenger-verify=NOTIFIER_MESSENGER_VERIFY_TOKEN```
 
 
 #### Infrastructure:
@@ -101,6 +104,8 @@ You need to have Datastore activated. The microservices will create necessary ki
 #### Microservices:
 * Credentials:
     * ```kubectl apply -f credentials.yaml```
+* Marks:
+    * ```kubectl apply -f marks.yaml```
 * Notifier:
     * ```kubectl apply -f notifier.yaml```
     

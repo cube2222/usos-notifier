@@ -12,14 +12,19 @@ var ErrUserNotFound = errors.New("user not found")
 var ErrNoUserToCheck = errors.New("no user to check")
 
 type User struct {
-	ObservedClasses []string
-	Classes         []Class
-	NextCheck       time.Time
+	AvailableClasses []ClassHeader
+	ObservedClasses  []ClassHeader
+	Classes          []Class
+	NextCheck        time.Time
+}
+
+type ClassHeader struct {
+	ID   string
+	Name string
 }
 
 type Class struct {
-	ID     string
-	Name   string
+	ClassHeader
 	Scores []Score
 }
 
