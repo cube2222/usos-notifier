@@ -42,17 +42,14 @@ func main() {
 	kms, err := cloudkms.New(httpCli)
 	if err != nil {
 		log.Fatal("Couldn't create cloud kms client", err)
-
 	}
 	ds, err := gdatastore.NewClient(context.Background(), config.ProjectName, option.WithCredentialsFile(config.GoogleApplicationCredentials))
 	if err != nil {
 		log.Fatal("Couldn't create datastore client", err)
-
 	}
 	pubsubCli, err := pubsub.NewClient(context.Background(), config.ProjectName, option.WithCredentialsFile(config.GoogleApplicationCredentials))
 	if err != nil {
 		log.Fatal("Couldn't create pubsub client", err)
-
 	}
 
 	credentialsStorage := datastore.NewCredentialsStorage(ds, kms, config.EncryptionKeyID, config.AdditionalAuthenticatedData)

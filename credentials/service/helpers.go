@@ -90,6 +90,20 @@ func login(ctx context.Context, user, password string) (string, error) {
 		return "", errors.Wrap(err, "couldn't login")
 	}
 
+	// It seems like the session cookie gets changed to a proper one after the first request.
+	// We have to do this first request here.
+	req, err = http.NewRequest("GET", "https://usosweb.mimuw.edu.pl/kontroler.php?_action=news/default", nil)
+	if err != nil {
+		return "", errors.Wrap(err, "couldn't create repeat get request")
+	}
+	req.WithContext(ctx)
+
+	redir = ""
+	_, err = cli.Do(req)
+	if err != nil && !strings.Contains(err.Error(), ErrAlreadySavedMsg) {
+		return "", errors.Wrap(err, "couldn't do repeat request")
+	}
+
 	parsed, err := url.Parse("https://usosweb.mimuw.edu.pl")
 	if err != nil {
 		return "", errors.Wrap(err, "couldn't parse url for usos session cookie extraction")
