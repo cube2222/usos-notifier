@@ -6,9 +6,9 @@ import (
 
 	"github.com/cube2222/grpc-utils/logger"
 	"github.com/cube2222/grpc-utils/requestid"
+	"github.com/cube2222/usos-notifier/notifier"
 	"github.com/pkg/errors"
 
-	"github.com/cube2222/usos-notifier/common/events/publisher"
 	"github.com/cube2222/usos-notifier/common/events/subscriber"
 	"github.com/cube2222/usos-notifier/common/users"
 )
@@ -21,16 +21,14 @@ type CommandsHandler interface {
 type HandleFunc func(ctx context.Context, userID users.UserID, params map[string]string) (string, error)
 
 type commandsHandler struct {
-	router             *router
-	notificationsTopic string
-	publisher          *publisher.Publisher
+	router *router
+	sender notifier.NotificationSender
 }
 
-func NewCommandsHandler(publisher *publisher.Publisher, notificationsTopic string) CommandsHandler {
+func NewCommandsHandler(sender notifier.NotificationSender) CommandsHandler {
 	return &commandsHandler{
-		router:             &router{},
-		publisher:          publisher,
-		notificationsTopic: notificationsTopic,
+		router: &router{},
+		sender: sender,
 	}
 }
 
@@ -64,6 +62,8 @@ func (ch *commandsHandler) Handle(matcher Matcher, handler func(ctx context.Cont
 
 func (ch *commandsHandler) HandleMessage(ctx context.Context, msg *subscriber.Message) error {
 	log := logger.FromContext(ctx)
+	userID := users.NewUserID(msg.Attributes["user_id"])
+
 	data, err := subscriber.DecodeTextMessage(msg)
 	if err != nil {
 		return subscriber.NewNonRetryableError(errors.Wrap(err, "couldn't decode text message"))
@@ -75,12 +75,11 @@ func (ch *commandsHandler) HandleMessage(ctx context.Context, msg *subscriber.Me
 		return nil
 	}
 
-	res, err := handler(ctx, users.NewUserID(msg.Attributes["user_id"]), params)
+	response, err := handler(ctx, userID, params)
 	if err != nil {
 		// TODO: Could add a few retries, and only notify about failure the last time
-		publishErr := ch.publisher.PublishEvent(ctx, ch.notificationsTopic, msg.Attributes,
+		publishErr := ch.sender.SendNotification(ctx, userID,
 			fmt.Sprintf(
-				// TODO: Add command zgłoś request-id, so that the user can notify us about bugs using messenger.
 				"Przy obsłudze Twojej wiadomości coś poszło nie tak. Spróbuj jeszcze raz, albo skontaktuj się z nami, podając nam identyfikator wiadomości: %v",
 				ctx.Value(requestid.Key),
 			),
@@ -91,8 +90,8 @@ func (ch *commandsHandler) HandleMessage(ctx context.Context, msg *subscriber.Me
 		return subscriber.NewNonRetryableError(errors.Wrap(err, "error handling user message"))
 	}
 
-	if len(res) > 0 {
-		err := ch.publisher.PublishEvent(ctx, ch.notificationsTopic, msg.Attributes, res)
+	if len(response) > 0 {
+		err := ch.sender.SendNotification(ctx, userID, response)
 		if err != nil {
 			return errors.Wrap(err, "error sending response message")
 		}

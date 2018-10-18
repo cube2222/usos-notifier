@@ -50,6 +50,24 @@ func main() {
 
 	s := service.NewService(credentialsCli, notificationSender, userStorage)
 
+	// Set up user message event subscription
+	go func() {
+		log.Fatal(
+			subscriber.
+				NewSubscriptionClient(pubsubCli).
+				Subscribe(
+					context.Background(),
+					config.CommandsSubscription,
+					subscriber.Chain(
+						s.HandleUserMessageEvent,
+						subscriber.WithLogger(logger.NewStdLogger()),
+						subscriber.WithRequestID,
+						subscriber.WithLogging(requestid.Key),
+					),
+				),
+		)
+	}()
+
 	// Set up credentials received event subscription
 	go func() {
 		log.Fatal(
@@ -57,7 +75,7 @@ func main() {
 				NewSubscriptionClient(pubsubCli).
 				Subscribe(
 					context.Background(),
-					config.CredentialsReceivedSubsription,
+					config.CredentialsReceivedSubscription,
 					subscriber.Chain(
 						s.HandleCredentialsProvidedEvent,
 						subscriber.WithLogger(logger.NewStdLogger()),

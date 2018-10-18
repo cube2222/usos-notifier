@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -13,23 +14,47 @@ import (
 	"github.com/cube2222/usos-notifier/marks"
 	"github.com/cube2222/usos-notifier/marks/parser"
 	"github.com/cube2222/usos-notifier/notifier"
+	"github.com/cube2222/usos-notifier/notifier/commands"
 	"github.com/pkg/errors"
 )
 
 var ErrSessionExpired = errors.New("session expired")
 
 type Service struct {
-	credentials credentials.CredentialsClient
-	sender      notifier.NotificationSender
-	users       marks.UserStorage
+	commandsHandler commands.CommandsHandler
+	credentials     credentials.CredentialsClient
+	sender          notifier.NotificationSender
+	users           marks.UserStorage
 }
 
 func NewService(credentials credentials.CredentialsClient, sender notifier.NotificationSender, users marks.UserStorage) *Service {
-	return &Service{
-		credentials: credentials,
-		sender:      sender,
-		users:       users,
+	s := &Service{
+		commandsHandler: commands.NewCommandsHandler(sender),
+		credentials:     credentials,
+		sender:          sender,
+		users:           users,
 	}
+
+	s.commandsHandler.Handle(commands.RegexpMatcher(regexp.MustCompile("^[Ss]ubscribe to (?P<class_id>.+)$")), s.SubscribeClass)
+	s.commandsHandler.Handle(commands.RegexpMatcher(regexp.MustCompile("^[Uu]nsubscribe from (?P<class_id>.+)$")), s.UnsubscribeClass)
+	s.commandsHandler.Handle(commands.RegexpMatcher(regexp.MustCompile("^[Ll]ist( classes)?$")), s.ListClasses)
+
+	return s
+}
+
+func (s *Service) HandleUserMessageEvent(ctx context.Context, message *subscriber.Message) error {
+	return s.commandsHandler.HandleMessage(ctx, message)
+}
+
+func (s *Service) getSession(ctx context.Context, userID users.UserID) (string, error) {
+	res, err := s.credentials.GetSession(ctx, &credentials.GetSessionRequest{
+		Userid: userID.String(),
+	})
+	if err != nil {
+		return "", errors.Wrap(err, "couldn't get session from credentials service")
+	}
+
+	return res.Sessionid, nil
 }
 
 func (s *Service) HandleCredentialsProvidedEvent(ctx context.Context, message *subscriber.Message) error {
@@ -40,13 +65,10 @@ func (s *Service) HandleCredentialsProvidedEvent(ctx context.Context, message *s
 
 	userID := users.NewUserID(string(text))
 
-	res, err := s.credentials.GetSession(ctx, &credentials.GetSessionRequest{
-		Userid: userID.String(),
-	})
+	session, err := s.getSession(ctx, userID)
 	if err != nil {
 		return errors.Wrap(err, "couldn't get session")
 	}
-	session := res.Sessionid
 
 	user, err := initializeUser(ctx, session)
 	if err != nil {
@@ -95,9 +117,10 @@ func updateScores(ctx context.Context, session string, user *marks.User) (*marks
 	cli := &http.Client{}
 
 	out := &marks.User{
-		ObservedClasses: user.ObservedClasses,
-		Classes:         make([]marks.Class, len(user.ObservedClasses)),
-		NextCheck:       user.NextCheck,
+		AvailableClasses: user.AvailableClasses,
+		ObservedClasses:  user.ObservedClasses,
+		Classes:          make([]marks.Class, len(user.ObservedClasses)),
+		NextCheck:        user.NextCheck,
 	}
 
 	for _, class := range out.ObservedClasses {
