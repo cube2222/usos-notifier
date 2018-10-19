@@ -7,7 +7,9 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/cube2222/grpc-utils/logger"
 	"github.com/cube2222/usos-notifier/common/events/subscriber"
 	"github.com/cube2222/usos-notifier/common/users"
 	"github.com/cube2222/usos-notifier/credentials"
@@ -113,7 +115,63 @@ func initializeUser(ctx context.Context, session string) (*marks.User, error) {
 	return out, nil
 }
 
-func updateScores(ctx context.Context, session string, user *marks.User) (*marks.User, error) {
+func (s *Service) RunScoreChecker(ctx context.Context) {
+	for {
+		err := s.checkSingleUser(ctx)
+		if err != nil {
+			if errors.Cause(err) == marks.ErrNoUserToCheck {
+				time.Sleep(time.Minute)
+				continue
+			}
+			logger.FromContext(ctx).Println(err)
+			continue
+		}
+	}
+}
+
+func (s *Service) checkSingleUser(ctx context.Context) error {
+	userID, user, err := s.users.HandleNextCheck(ctx)
+	if err != nil {
+		return errors.Wrap(err, "couldn't get next user to check")
+	}
+
+	session, err := s.getSession(ctx, userID)
+	if err != nil {
+		return errors.Wrap(err, "couldn't get session")
+	}
+
+	updatedUser, err := getUpdatedUser(ctx, session, user)
+	if err != nil {
+		return errors.Wrap(err, "couldn't get updated scores")
+	}
+
+	changes := getChangedScores(user, updatedUser)
+	if len(changes) == 0 {
+		return nil
+	}
+
+	for class, scores := range changes {
+		lines := make([]string, len(scores)+1)
+		lines[0] = fmt.Sprintf("New scores have appeared in %s:", class)
+		for i, score := range scores {
+			lines[i+1] = fmt.Sprintf("%s: %v/%v", score.Name, score.Actual, score.Max)
+		}
+
+		err = s.sender.SendNotification(ctx, userID, strings.Join(lines, "\n"))
+		if err != nil {
+			return errors.Wrap(err, "couldn't send notification")
+		}
+	}
+
+	err = s.users.Set(ctx, userID, updatedUser)
+	if err != nil {
+		return errors.Wrap(err, "couldn't save user")
+	}
+
+	return nil
+}
+
+func getUpdatedUser(ctx context.Context, session string, user *marks.User) (*marks.User, error) {
 	cli := &http.Client{}
 
 	out := &marks.User{
@@ -129,12 +187,39 @@ func updateScores(ctx context.Context, session string, user *marks.User) (*marks
 			return nil, errors.Wrapf(err, "couldn't get scores for class %v", class.ID)
 		}
 
-		user.Classes = append(user.Classes, parser.MakeClassWithScores(class.ID, class.Name, scores))
+		out.Classes = append(out.Classes, parser.MakeClassWithScores(class.ID, class.Name, scores))
 	}
 
-	sort.Slice(user.Classes, func(i, j int) bool {
-		return user.Classes[i].ID < user.Classes[j].ID
+	sort.Slice(out.Classes, func(i, j int) bool {
+		return out.Classes[i].ID < out.Classes[j].ID
 	})
 
 	return out, nil
+}
+
+func getChangedScores(old *marks.User, new *marks.User) map[string][]marks.Score {
+	changed := make(map[string][]marks.Score)
+	oldScores := make(map[string]map[string]marks.Score)
+	for _, class := range old.Classes {
+		oldScores[class.ID] = make(map[string]marks.Score)
+		for _, score := range class.Scores {
+			oldScores[class.ID][score.Name] = score
+		}
+	}
+
+	for _, class := range new.Classes {
+		for _, newScore := range class.Scores {
+			oldScore, ok := oldScores[class.ID][newScore.Name]
+
+			newVisibleScore := !ok && !newScore.Unknown && !newScore.Hidden
+			scoreRevealed := ok && !oldScore.Visible() && newScore.Visible()
+			scoreUpdated := ok && oldScore.Visible() && newScore.Visible() && oldScore.Actual != newScore.Actual
+
+			if newVisibleScore || scoreRevealed || scoreUpdated {
+				changed[class.Name] = append(changed[class.Name], newScore)
+			}
+		}
+	}
+
+	return changed
 }

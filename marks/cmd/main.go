@@ -86,6 +86,8 @@ func main() {
 		)
 	}()
 
+	go s.RunScoreChecker(context.Background())
+
 	// Set up health checking
 	health.LaunchHealthCheckHandler()
 }

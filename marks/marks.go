@@ -35,6 +35,10 @@ type Score struct {
 	Actual, Max float64
 }
 
+func (s *Score) Visible() bool {
+	return !s.Unknown && !s.Hidden
+}
+
 type UserStorage interface {
 	Get(ctx context.Context, userID users.UserID) (*User, error)
 	Set(ctx context.Context, userID users.UserID, user *User) error
