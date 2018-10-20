@@ -71,8 +71,8 @@ You need to have Datastore activated. The microservices will create necessary ki
 #### Preliminary cluster setup:
 ```
     gcloud config set project usos-notifier
-    gcloud config set compute/zone europe-west3-b
-    gcloud container clusters get-credentials cluster-1 --zone europe-west3-b
+    gcloud config set compute/zone us-central1-a
+    gcloud container clusters get-credentials cluster-1 --zone us-central1-a
     kubectl create clusterrolebinding add-on-cluster-admin --clusterrole=cluster-admin --serviceaccount=kube-system:default
     helm init
     kubectl create clusterrolebinding cluster-admin-binding-jakub.wit.martin@gmail.com --clusterrole=cluster-admin --user=jakub.wit.martin@gmail.com

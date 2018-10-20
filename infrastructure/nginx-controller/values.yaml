@@ -8,5 +8,9 @@ controller:
   resources:
     requests:
       cpu: 25m
+defaultBackend:
+  resources:
+    requests:
+      cpu: 10m
 rbac:
   create: true

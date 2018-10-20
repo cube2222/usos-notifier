@@ -24,7 +24,7 @@ spec:
           secretName: marks-service-account
       containers:
       - name: marks
-        image: cube2222/marks:0.0.3
+        image: cube2222/marks:0.0.4
         ports:
         - containerPort: 8080
         - containerPort: 8081

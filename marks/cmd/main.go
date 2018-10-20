@@ -67,6 +67,7 @@ func main() {
 				),
 		)
 	}()
+	log.Printf("Subscribed to %s", config.CommandsSubscription)
 
 	// Set up credentials received event subscription
 	go func() {
@@ -85,8 +86,10 @@ func main() {
 				),
 		)
 	}()
+	log.Printf("Subscribed to %s", config.CredentialsReceivedSubscription)
 
 	go s.RunScoreChecker(context.Background())
+	log.Println("Running score checker.")
 
 	// Set up health checking
 	health.LaunchHealthCheckHandler()
